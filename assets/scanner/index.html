@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>QTrust Scanner</title>
+    <link rel="stylesheet" href="scanner.css">
+</head>
+<body>
+    <!-- Home Screen -->
+    <div id="home-screen">
+        <div class="home-header">
+            <h1 class="home-title">QTrust Scanner</h1>
+            <p class="home-subtitle">Cloud-based QR & Barcode Scanner</p>
+        </div>
+
+        <div class="home-content">
+            <div class="home-section">
+                <label class="home-label">Scan Type</label>
+                <div class="scan-type-picker">
+                    <button class="scan-type-btn active" data-type="0">QR Code</button>
+                    <button class="scan-type-btn" data-type="1">Barcode</button>
+                </div>
+            </div>
+
+            <div class="home-section">
+                <label class="home-label">API Key</label>
+                <input id="input-api-key" type="text" class="api-key-input" placeholder="sk_live_..." autocomplete="off" spellcheck="false">
+                <p id="api-key-error" class="api-key-error hidden">API key is required to start scanning</p>
+            </div>
+
+            <div class="home-section">
+                <label class="home-label">Options</label>
+                <div class="options-card">
+                    <div class="option-row">
+                        <div class="option-text">
+                            <span class="option-title">Skip Tutorial</span>
+                            <span class="option-subtitle">Langsung ke scanner tanpa tutorial</span>
+                        </div>
+                        <label class="toggle">
+                            <input id="toggle-skip-tutorial" type="checkbox">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="home-section">
+                <button id="btn-start-scan" class="start-scan-btn">
+                    <svg class="scan-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                        <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                        <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                        <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                        <line x1="7" y1="12" x2="17" y2="12"/>
+                    </svg>
+                    Start Scanning
+                </button>
+            </div>
+
+            <div id="home-result" class="home-section result-section hidden">
+                <label class="home-label">Last Result</label>
+                <div class="result-card">
+                    <div class="result-row">
+                        <span class="result-label">Data</span>
+                        <span id="result-data" class="result-value"></span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Format</span>
+                        <span id="result-format" class="result-value"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="home-footer">
+            <span>QTrust Scanner v1.0.0</span>
+        </div>
+    </div>
+
+    <!-- Tutorial Screen -->
+    <div id="tutorial-screen" class="hidden">
+        <div class="tutorial-header">
+            <button id="btn-tutorial-back" class="tutorial-back" aria-label="Go back">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" fill="currentColor"/></svg>
+            </button>
+            <h2 class="tutorial-title">Cara scan yang benar</h2>
+        </div>
+
+        <div class="tutorial-content">
+            <div class="tutorial-step">
+                <h3 class="step-heading"><span class="step-number">1.</span> Posisi QR pada kemasan</h3>
+                <p class="step-desc">QR biasanya berada di sisi belakang atau samping kemasan</p>
+                <div class="step-image-wrap">
+                    <img src="assets/tutorial-1.jpg" alt="Posisi QR pada kemasan" class="step-image" width="600" height="200" loading="eager">
+                </div>
+            </div>
+
+            <div class="tutorial-step">
+                <h3 class="step-heading"><span class="step-number">2.</span> Arahkan QR ke dalam area scan</h3>
+                <p class="step-desc">Posisikan QR di dalam area scan dengan pencahayaan yang cukup</p>
+                <div class="step-image-wrap">
+                    <img src="assets/tutorial-2.jpg" alt="Arahkan QR ke area scan" class="step-image" width="600" height="200" loading="eager">
+                </div>
+            </div>
+
+            <div class="tutorial-step">
+                <h3 class="step-heading"><span class="step-number">3.</span> Jarak Ideal</h3>
+                <p class="step-desc">Pastikan jarak kamera sekitar 10–15 cm dari QR</p>
+                <div class="step-image-wrap">
+                    <img src="assets/tutorial-3.jpg" alt="Jarak ideal 10-15cm" class="step-image" width="600" height="200" loading="eager">
+                </div>
+            </div>
+        </div>
+
+        <div class="tutorial-footer">
+            <button id="btn-tutorial-start" class="tutorial-start-btn">Mulai Scan</button>
+        </div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen" class="hidden">
+        <!-- Scrolling banner -->
+        <div class="result-banner">
+            <div class="banner-content">
+                <span class="banner-text">Verifikasi Keaslian hanya di</span>
+                <span class="banner-url">HTTPS://AHM.TO</span>
+            </div>
+            <button class="banner-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span>INFO</span>
+            </button>
+        </div>
+
+        <div class="result-divider"></div>
+
+        <!-- Product section -->
+        <div class="result-product">
+            <div class="result-image-wrap">
+                <div id="result-product-img" class="result-product-img">
+                    <!-- Placeholder product image -->
+                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+                    </svg>
+                </div>
+            </div>
+            <h2 id="result-product-name" class="result-product-name">AHM OIL MPX 1</h2>
+        </div>
+
+        <!-- Verification status card -->
+        <div class="result-status-card">
+            <div class="status-row">
+                <span id="result-qr-status" class="status-label-valid">QR Valid</span>
+                <div id="result-status-icon" class="status-icon status-valid">
+                    <!-- Valid icon (checkmark) — shown when .status-valid -->
+                    <svg class="icon-valid" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="#1CBF1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <polyline points="22 4 12 14.01 9 11.01" stroke="#1CBF1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <!-- Invalid icon (X) — shown when .status-invalid -->
+                    <svg class="icon-invalid" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="#EC1B30" stroke-width="2"/>
+                        <line x1="15" y1="9" x2="9" y2="15" stroke="#EC1B30" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="9" y1="9" x2="15" y2="15" stroke="#EC1B30" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="status-row">
+                <span class="status-detail-label">Total Scan yang telah dilakukan</span>
+                <span id="result-scan-count" class="status-detail-value">(1/5)</span>
+            </div>
+            <div class="status-row">
+                <span class="status-detail-label">Kode QR</span>
+                <span id="result-qr-code" class="status-detail-value result-qr-code-value">https://ahm.to/zx21G3Zb</span>
+            </div>
+            <div class="status-row">
+                <span class="status-detail-label">Nomor Seri</span>
+                <span id="result-serial" class="status-detail-value">213696348</span>
+            </div>
+        </div>
+
+        <!-- Content blocks -->
+        <div class="result-content-blocks">
+            <div class="content-block">
+                <h3 class="content-block-title">Deskripsi</h3>
+                <p id="result-description" class="content-block-body">Mengandung Engine Protection Technology yang diformulasikan khusus oleh Honda R&D Jepang untuk teknologi sepeda motor Honda tipe kopling basah.</p>
+            </div>
+
+            <div class="content-block">
+                <h3 class="content-block-title">Spesifikasi</h3>
+                <div id="result-specs" class="content-block-specs">
+                    <span>Untuk Cub &amp; Sport</span>
+                    <span>SAE 10W-30 API SL JASO MA</span>
+                    <span>Volume 800 ml</span>
+                    <span>Part Number 082322MAK1LN0</span>
+                </div>
+            </div>
+
+            <div class="content-block">
+                <h3 class="content-block-title">Disclaimer</h3>
+                <p id="result-disclaimer" class="content-block-body">QR yang tertera pada produk diproteksi menggunakan QR code dengan URL, HTTP://AHM.TO/zx21G3Zb</p>
+            </div>
+
+            <button id="btn-result-report" class="result-report-btn">Lapor</button>
+            <button id="btn-scan-again" class="result-scan-again-btn">Scan Lagi</button>
+        </div>
+    </div>
+
+    <!-- Scanner Screen -->
+    <div id="scanner-container" class="hidden">
+        <video id="video" autoplay playsinline webkit-playsinline muted></video>
+        <canvas id="canvas" hidden></canvas>
+
+        <!-- Viewfinder with dark overlay via box-shadow -->
+        <div id="viewfinder">
+            <div class="corner corner-tl"></div>
+            <div class="corner corner-tr"></div>
+            <div class="corner corner-bl"></div>
+            <div class="corner corner-br"></div>
+        </div>
+
+        <!-- Top bar -->
+        <button id="btn-back" aria-label="Go back">
+            <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </button>
+        <button id="btn-flash" aria-label="Toggle flash">
+            <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+        </button>
+
+        <!-- Instruction pill -->
+        <div id="scan-instruction">
+            <span id="scan-instruction-text">Arahkan ke QR Code pada kemasan</span>
+        </div>
+
+        <!-- Version label -->
+        <div id="version">QTrust Scanner v1.0.0</div>
+
+        <!-- Bottom tip -->
+        <div id="scan-tip">
+            <svg class="tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 21h6M12 3a6 6 0 0 0-4 10.5V17h8v-3.5A6 6 0 0 0 12 3z"/>
+            </svg>
+            <span>Tips: Pastikan pencahayaan cukup</span>
+        </div>
+
+        <!-- Hidden but kept for JS references -->
+        <div id="zoom-controls" style="display:none">
+            <button id="btn-zoom-out" aria-label="Zoom out">
+                <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+            </button>
+            <span id="zoom-level">1.0x</span>
+            <button id="btn-zoom-in" aria-label="Zoom in">
+                <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
+        </div>
+
+        <div id="status">Initializing...</div>
+        <div id="debug"></div>
+        <div id="flash-overlay" class="hidden"></div>
+    </div>
+    <!-- Single classic bundle (esbuild). type=module is avoided because WKWebView
+         blocks ES-module loading under file://; the SDK loads this page from a
+         file:// URL for offline operation. Rebuild via scripts/sync-web-assets.sh. -->
+    <script src="app.bundle.js"></script>
+</body>
+</html>

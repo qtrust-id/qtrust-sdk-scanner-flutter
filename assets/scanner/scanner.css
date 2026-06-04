@@ -1,0 +1,629 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: #f0f0f0; overflow: hidden; width: 100%; height: 100%; font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; }
+
+/* All screens share: max-width 480px, centered horizontally.
+   On desktop, body bg (#f0f0f0) shows on sides as a neutral frame. */
+@media (min-width: 481px) {
+    #home-screen, #tutorial-screen, #scanner-container, #result-screen {
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
+    }
+}
+
+/* ──────────────────────────────────────────────
+   Home Screen
+   ────────────────────────────────────────────── */
+
+#home-screen {
+    position: fixed; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+    max-width: 480px; width: 100%;
+    display: flex; flex-direction: column;
+    background: #fff; color: #333;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#home-screen.hidden { display: none; }
+
+.home-header {
+    padding: calc(env(safe-area-inset-top, 0px) + 32px) 24px 24px;
+}
+
+.sdk-mode .home-header {
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 32px), 76px);
+}
+
+.home-title {
+    font-size: 2rem; font-weight: 700; color: #1a1a1a;
+    letter-spacing: -0.5px;
+}
+
+.home-subtitle {
+    font-size: 0.95rem; color: #888; margin-top: 4px;
+}
+
+.home-content {
+    flex: 1; padding: 0 24px;
+    display: flex; flex-direction: column; gap: 24px;
+}
+
+.home-section { display: flex; flex-direction: column; gap: 10px; }
+
+.home-label {
+    font-size: 0.8rem; font-weight: 600; color: #888;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* Scan type segmented picker */
+.scan-type-picker {
+    display: flex; gap: 0;
+    background: #f3f4f6;
+    border-radius: 10px; padding: 3px;
+    border: 1px solid #e5e7eb;
+}
+
+.scan-type-btn {
+    flex: 1; padding: 10px 16px;
+    background: transparent; border: none; border-radius: 8px;
+    color: #888; font-size: 0.9rem; font-weight: 500;
+    cursor: pointer; transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.scan-type-btn.active {
+    background: #fff; color: #1a1a1a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.scan-type-btn:active { transform: scale(0.97); }
+
+/* API key input */
+.api-key-input {
+    width: 100%; padding: 12px 16px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    color: #1a1a1a; font-size: 0.9rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    outline: none;
+    transition: border-color 200ms ease;
+}
+
+.api-key-input::placeholder { color: #aaa; }
+.api-key-input:focus { border-color: #C0392B; }
+
+.api-key-error {
+    font-size: 0.8rem; color: #C0392B; margin-top: -4px;
+}
+
+/* Options card */
+.options-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.option-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; gap: 12px;
+}
+
+.option-text {
+    display: flex; flex-direction: column; gap: 2px;
+    flex: 1; min-width: 0;
+}
+
+.option-title {
+    font-size: 0.9rem; color: #1a1a1a; font-weight: 500;
+}
+
+.option-subtitle {
+    font-size: 0.75rem; color: #888;
+}
+
+.option-divider {
+    height: 1px; background: #e5e7eb; margin: 0 16px;
+}
+
+/* Toggle switch */
+.toggle {
+    position: relative; display: inline-block;
+    width: 48px; height: 28px; flex-shrink: 0;
+}
+
+.toggle input { opacity: 0; width: 0; height: 0; }
+
+.toggle-slider {
+    position: absolute; inset: 0;
+    background: #ddd; border-radius: 14px;
+    cursor: pointer;
+    transition: background 200ms ease;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute; left: 3px; top: 3px;
+    width: 22px; height: 22px;
+    background: #fff; border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 200ms ease;
+}
+
+.toggle input:checked + .toggle-slider {
+    background: #34C759;
+}
+
+.toggle input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* Start scan button */
+.start-scan-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 16px 24px;
+    background: #C0392B; color: #fff;
+    border: none; border-radius: 12px;
+    font-size: 1rem; font-weight: 600;
+    cursor: pointer;
+    transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.start-scan-btn:hover { background: #a93226; }
+.start-scan-btn:active { transform: scale(0.98); background: #922b21; }
+
+.scan-icon { width: 22px; height: 22px; stroke: currentColor; }
+
+/* Result section */
+.result-section { animation: fadeIn 300ms ease; }
+
+.result-card {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+.result-row {
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+.result-label {
+    font-size: 0.8rem; color: #888;
+}
+
+.result-value {
+    font-size: 0.85rem; color: #1a1a1a;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    text-align: right; max-width: 60%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Home footer */
+.home-footer {
+    padding: 16px 24px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    text-align: center;
+    font-size: 10px; color: rgba(0,0,0,0.3);
+    letter-spacing: 0.3px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ──────────────────────────────────────────────
+   Tutorial Screen
+   ────────────────────────────────────────────── */
+
+#tutorial-screen {
+    position: fixed; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+    max-width: 480px; width: 100%;
+    display: flex; flex-direction: column;
+    background: #fff; color: #333;
+    overflow: hidden;
+}
+
+#tutorial-screen.hidden { display: none; }
+
+.tutorial-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
+}
+
+/* SDK mode (WKWebView/Android WebView) — env(safe-area-inset-top) returns 0,
+   so enforce minimum padding to clear native status bar. */
+.sdk-mode .tutorial-header {
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 56px);
+}
+
+.tutorial-back {
+    width: 36px; height: 36px; border: none; background: transparent;
+    color: #1a1a1a; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; transition: transform 100ms ease;
+    -webkit-tap-highlight-color: transparent; flex-shrink: 0;
+}
+
+.tutorial-back:active { transform: scale(0.9); }
+
+.tutorial-title {
+    font-size: 1.1rem; font-weight: 600; color: #1a1a1a;
+    letter-spacing: -0.3px;
+}
+
+.tutorial-content {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 24px 20px 120px;
+    display: flex; flex-direction: column; gap: 28px;
+}
+
+.tutorial-step {
+    display: flex; flex-direction: column; gap: 6px;
+}
+
+.step-heading {
+    font-size: 1rem; font-weight: 600; color: #1a1a1a;
+    line-height: 1.4;
+}
+
+.step-number { color: #1a1a1a; }
+
+.step-desc {
+    font-size: 0.875rem; color: #888; line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.step-image-wrap {
+    border-radius: 10px; overflow: hidden;
+    background: #f3f4f6;
+}
+
+.step-image {
+    width: 100%; height: auto; display: block;
+    object-fit: cover;
+}
+
+.tutorial-footer {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    max-width: 480px; width: 100%;
+    padding: 16px 20px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    background: linear-gradient(transparent, #fff 30%);
+}
+
+.tutorial-start-btn {
+    display: block; width: 100%; padding: 16px 24px;
+    background: #C0392B; color: #fff;
+    border: none; border-radius: 12px;
+    font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: all 200ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tutorial-start-btn:hover { background: #a93226; }
+.tutorial-start-btn:active { transform: scale(0.98); background: #922b21; }
+
+/* ──────────────────────────────────────────────
+   Scanner Screen
+   ────────────────────────────────────────────── */
+
+#scanner-container { position: fixed; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); max-width: 480px; width: 100%; height: 100%; background: #000; overflow: hidden; }
+#scanner-container.hidden { display: none; }
+
+/* Hidden until the stream is actually playing. A paused <video> makes Android
+   WebView paint a giant overlay play button that CSS pseudo-hiding can't kill
+   reliably; opacity:0 hides the whole video shadow DOM (button included). The
+   black #scanner-container behind it covers the gap until .playing is added. */
+#video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; opacity: 0; transition: opacity 0.2s ease; }
+#video.playing { opacity: 1; }
+#scanner-container { background: #000; }
+#video::-webkit-media-controls { display: none !important; }
+#video::-webkit-media-controls-enclosure { display: none !important; }
+#video::-webkit-media-controls-panel { display: none !important; }
+#video::-webkit-media-controls-start-playback-button { display: none !important; }
+/* Big centered play overlay Android WebView paints over a paused/loading video */
+#video::-webkit-media-controls-overlay-play-button { display: none !important; }
+#video::-webkit-media-controls-overlay-enclosure { display: none !important; }
+
+/* Viewfinder — centered with box-shadow overlay */
+#viewfinder {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 65vmin; height: 65vmin; max-width: 280px; max-height: 280px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 calc(max(100vw, 100vh)) rgba(0, 0, 0, 0.6);
+    z-index: 2; pointer-events: none;
+}
+#viewfinder.barcode-mode {
+    width: 85vw; height: 28vmin;
+    max-width: 360px; max-height: 110px;
+}
+
+/* Corner brackets */
+.corner {
+    position: absolute; width: 32px; height: 32px;
+    border-color: rgba(255, 255, 255, 0.85); border-style: solid; border-width: 0;
+}
+.corner-tl { top: -1px; left: -1px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 12px; }
+.corner-tr { top: -1px; right: -1px; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 12px; }
+.corner-bl { bottom: -1px; left: -1px; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 12px; }
+.corner-br { bottom: -1px; right: -1px; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 12px; }
+
+/* Version label — bottom center */
+#version {
+    position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.4); font-family: -apple-system, system-ui, sans-serif;
+    font-size: 10px; font-weight: 400; letter-spacing: 0.3px;
+    z-index: 10;
+}
+
+/* Status — hidden */
+#status { display: none; }
+
+/* Top bar buttons */
+#btn-back, #btn-flash {
+    position: absolute; top: calc(env(safe-area-inset-top, 44px) + 44px);
+    width: 40px; height: 40px; border-radius: 50%; border: none;
+    background: transparent; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 100ms ease;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 10;
+}
+#btn-back { left: 12px; }
+#btn-flash { right: 12px; }
+#btn-back:active, #btn-flash:active {
+    transform: scale(0.9);
+}
+#btn-back svg, #btn-flash svg {
+    width: 24px; height: 24px; fill: #fff;
+}
+
+/* Flash active state */
+#btn-flash.active svg path { fill: #ffd600; }
+
+/* Instruction pill — below top bar */
+#scan-instruction {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 44px) + 96px);
+    left: 50%; transform: translateX(-50%);
+    z-index: 10;
+}
+
+#scan-instruction-text {
+    display: inline-block;
+    padding: 10px 20px;
+    background: rgba(30, 30, 30, 0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-radius: 24px;
+    color: #fff;
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 14px; font-weight: 500;
+    white-space: nowrap;
+    letter-spacing: -0.1px;
+}
+
+/* Bottom tip */
+#scan-tip {
+    position: absolute;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
+    left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    z-index: 10;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 13px; font-weight: 400;
+    white-space: nowrap;
+}
+
+.tip-icon {
+    width: 18px; height: 18px;
+    stroke: rgba(255, 214, 0, 0.8);
+    flex-shrink: 0;
+}
+
+/* Flash overlay */
+#flash-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.5); opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; z-index: 20; }
+#flash-overlay.flash { opacity: 1; }
+
+/* Debug overlay — hidden by default, enable via ?debug=1 */
+#debug { display: none; }
+#debug.visible {
+    display: block;
+    position: absolute; top: 40px; left: 8px; right: 8px;
+    color: lime; font-size: 10px; font-family: monospace;
+    background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px;
+    max-height: 40vh; overflow-y: auto; z-index: 999; white-space: pre-wrap;
+}
+
+/* ──────────────────────────────────────────────
+   Result Screen
+   ────────────────────────────────────────────── */
+
+#result-screen {
+    position: fixed; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+    max-width: 480px; width: 100%;
+    display: flex; flex-direction: column;
+    background: #fff; color: #1c1c1c;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-top: env(safe-area-inset-top, 0px);
+}
+
+.sdk-mode #result-screen {
+    padding-top: max(env(safe-area-inset-top, 0px), 48px);
+}
+
+#result-screen.hidden { display: none; }
+
+/* Scrolling banner */
+.result-banner {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px; gap: 12px;
+    background: #E8A527;
+    flex-shrink: 0;
+}
+
+.banner-content {
+    display: flex; align-items: center; gap: 14px;
+    flex: 1; min-width: 0;
+}
+
+.banner-text {
+    font-size: 12px; font-weight: 400; color: #fff;
+    white-space: nowrap;
+}
+
+.banner-url {
+    font-size: 12px; font-weight: 700; color: #fff;
+    white-space: nowrap;
+}
+
+.banner-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: #fff; border: none; border-radius: 4px;
+    color: #E8A527; font-size: 12px; font-weight: 500;
+    cursor: pointer; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.banner-btn svg { stroke: #E8A527; }
+
+/* Divider */
+.result-divider {
+    height: 0.5px; background: #e7e7e7; flex-shrink: 0;
+}
+
+/* Product section */
+.result-product {
+    display: flex; flex-direction: column; align-items: flex-start;
+    padding: 0 16px;
+}
+
+.result-image-wrap {
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; height: 174px;
+    background: #fff;
+}
+
+.result-product-img {
+    width: 119px; height: 119px;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.result-product-img img {
+    max-width: 100%; max-height: 100%; object-fit: contain;
+}
+
+.result-product-name {
+    font-size: 18px; font-weight: 600; color: #000;
+    line-height: 22px; width: 100%;
+}
+
+/* Verification status card */
+.result-status-card {
+    display: flex; flex-direction: column;
+    padding: 24px; gap: 14px;
+    background: #fff;
+    border-top: 1px solid #ebebeb;
+    border-bottom: 1px solid #ebebeb;
+    margin-top: 16px;
+}
+
+.status-row {
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+.status-label-valid {
+    font-size: 16px; font-weight: 700; color: #1CBF1C;
+    line-height: 24px;
+}
+
+.status-label-invalid {
+    font-size: 16px; font-weight: 700; color: #EC1B30;
+    line-height: 24px;
+}
+
+/* Status icon — toggle valid/invalid SVGs via CSS class */
+.status-icon { flex-shrink: 0; }
+.status-icon .icon-valid,
+.status-icon .icon-invalid { display: none; }
+.status-icon.status-valid .icon-valid { display: block; }
+.status-icon.status-invalid .icon-invalid { display: block; }
+
+.status-detail-label {
+    font-size: 12px; font-weight: 400; color: #2d2d2d;
+    line-height: 18px;
+}
+
+.status-detail-value {
+    font-size: 12px; font-weight: 600; color: #2d2d2d;
+    line-height: 18px; text-align: right;
+}
+
+.result-qr-code-value {
+    max-width: 55%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Content blocks */
+.result-content-blocks {
+    display: flex; flex-direction: column;
+    padding: 24px; gap: 16px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+}
+
+.content-block {
+    display: flex; flex-direction: column; gap: 7px;
+}
+
+.content-block-title {
+    font-size: 14px; font-weight: 700; color: #1c1c1c;
+    line-height: 20px;
+}
+
+.content-block-body {
+    font-size: 12px; font-weight: 400; color: #9f9f9f;
+    line-height: 18px;
+}
+
+.content-block-specs {
+    display: flex; flex-direction: column; gap: 2px;
+    font-size: 10px; font-weight: 400; color: #333;
+    line-height: 14px;
+}
+
+/* Report button */
+.result-report-btn {
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; padding: 10px 16px;
+    background: #EC1B30; color: #fff;
+    border: none; border-radius: 4px;
+    font-size: 14px; font-weight: 500; line-height: 20px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 200ms ease;
+    margin-top: 8px;
+}
+
+.result-report-btn:hover { background: #d91e32; }
+.result-report-btn:active { background: #c4162a; }
+
+/* Scan again button */
+.result-scan-again-btn {
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; padding: 10px 16px;
+    background: #fff; color: #2d2d2d;
+    border: 1px solid #e5e7eb; border-radius: 4px;
+    font-size: 14px; font-weight: 500; line-height: 20px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 200ms ease;
+}
+
+.result-scan-again-btn:hover { background: #f9fafb; }
+.result-scan-again-btn:active { background: #f3f4f6; }
+
+.hidden { display: none; }

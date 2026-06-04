@@ -1,0 +1,25 @@
+name: qtrust_scanner
+description: Cloud-based QR & barcode scanner SDK for Flutter. Bundles the scanner web UI and serves it over a localhost secure origin (offline-capable).
+version: 1.0.3
+homepage: https://qtrust.id
+repository: https://github.com/qtrust-id/qtrust-sdk-scanner-flutter
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_inappwebview: ^6.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  assets:
+    - assets/scanner/
+    - assets/scanner/assets/
+    - assets/scanner/modules/
