@@ -63,7 +63,7 @@ export function openCamera() {
             canvas.height = state.captureHeight;
             dbg("capture: " + state.captureWidth + "x" + state.captureHeight);
 
-            status.textContent = state.ws ? "Scanning..." : "Waiting for connection...";
+            status.textContent = "Scanning...";
         });
     }).then(function () {
         initZoomCapabilities();

@@ -25,7 +25,6 @@
   var ScanType = { QR: 0, BARCODE: 1 };
   var Theme = { DARK: 0, LIGHT: 1 };
   var Locale = { ID: 0, EN: 1 };
-  var SCAN_TYPE_NAMES = ["qr", "barcode"];
   function parseScanType(raw) {
     if (raw === "barcode" || raw === "1" || raw === 1) return ScanType.BARCODE;
     return ScanType.QR;
@@ -33,8 +32,6 @@
   var state = {
     scanType: parseScanType(bootParam("type")),
     mode: bootParam("mode") || "home",
-    apiKey: bootParam("key") || "",
-    serverUrl: "",
     isSDKMode: false,
     // Embed (web SDK) — loaded inside an iframe with ?embed=1. The web SDK
     // drives this page via postMessage instead of injected JS. See embed.js
@@ -63,31 +60,19 @@
     maxZoom: 1,
     zoomStep: 0.5,
     hasNativeZoom: false,
-    // WebSocket
-    ws: null,
+    // Capture frame rate (frames/sec handed to the on-device decoder).
     fps: 5,
-    reconnectAttempts: 0,
-    maxReconnectAttempts: 3,
-    // Decode backend — "ws" = cloud decode (primary), "wasm" = on-device
-    // zxing-wasm fallback, used when the cloud is unreachable (offline mode).
-    decodeMode: "ws",
+    // On-device decode backend (zxing-wasm). Loaded lazily on first scan.
     wasmReady: false,
-    // Auth-rejection latch — set when the server reachably rejects the key
-    // (WS close 4001/4029). Once set, offline fallback is forbidden for the rest
-    // of the session, even if a connect-timeout fallback raced ahead of the
-    // close frame. Prevents bypassing API-key auth via the offline path.
-    authRejected: false,
-    // Ready-signal latch — bridgeReady() must fire at most once per scan session
-    // (auth_ok and a later goOffline could otherwise both signal ready).
+    // Ready-signal latch — bridgeReady() must fire at most once per scan session.
     readySignaled: false,
     // Capture
     captureTimer: null,
     captureWidth: 0,
     captureHeight: 0,
     captureCrop: null,
-    // Ready gate — parallel init requires both before capture starts
+    // Ready gate — capture starts once the camera and decoder are both ready.
     cameraReady: false,
-    wsAuthed: false,
     // Idempotency guard — a repeated ScannerInit (the web SDK fires sdk_init on
     // start + iframe load + sdk_ready to beat load-order races) must NOT re-open
     // the camera, or the second getUserMedia aborts the first video.play().
@@ -95,9 +80,6 @@
   };
   state.isEmbed = bootParam("embed") === "1";
   state.isSDKMode = state.mode === "sdk" || state.isEmbed;
-  if (location.protocol !== "file:") {
-    state.serverUrl = location.protocol + "//" + location.host;
-  }
 
   // modules/debug.js
   var debugEl = document.getElementById("debug");
@@ -2302,11 +2284,7 @@
   function setDecodeCallbacks(cbs) {
     onResultCb = cbs.onResult;
   }
-  function isWasmMode() {
-    return state.decodeMode === "wasm";
-  }
-  async function enableWasmFallback() {
-    state.decodeMode = "wasm";
+  async function ensureDecoder() {
     if (state.wasmReady) return true;
     try {
       await loadWasm();
@@ -2395,33 +2373,6 @@
   var video = document.getElementById("video");
   var canvas = document.getElementById("canvas");
   var ctx = canvas.getContext("2d");
-  var HAS_OFFSCREEN_CANVAS = typeof OffscreenCanvas !== "undefined";
-  var HAS_CREATE_IMAGE_BITMAP = typeof createImageBitmap === "function";
-  var useBinaryPipeline = HAS_OFFSCREEN_CANVAS && HAS_CREATE_IMAGE_BITMAP;
-  var worker = null;
-  var workerReady = false;
-  if (useBinaryPipeline) {
-    try {
-      worker = new Worker("capture-worker.js");
-      worker.onmessage = function(e2) {
-        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-          state.ws.send(e2.data);
-        }
-      };
-      worker.onerror = function(err) {
-        dbg("worker error: " + err.message + " \u2014 falling back to legacy");
-        useBinaryPipeline = false;
-        workerReady = false;
-      };
-      workerReady = true;
-      dbg("capture: binary pipeline (OffscreenCanvas + Worker)");
-    } catch (err) {
-      dbg("worker init failed: " + err.message + " \u2014 falling back to legacy");
-      useBinaryPipeline = false;
-    }
-  } else {
-    dbg("capture: legacy pipeline (toDataURL + JSON)");
-  }
   function computeViewfinderCrop(videoW, videoH) {
     var vfEl = document.getElementById("viewfinder");
     if (!vfEl) return null;
@@ -2462,70 +2413,13 @@
       state.captureTimer = null;
     }
   }
-  function terminateWorker() {
-    if (worker) {
-      worker.terminate();
-      worker = null;
-      workerReady = false;
-    }
-  }
   function tryStartCapture() {
-    var backendReady = isWasmMode() ? state.wasmReady : state.wsAuthed;
-    if (state.cameraReady && backendReady) {
-      dbg("ready \u2014 starting capture (" + state.decodeMode + ")");
+    if (state.cameraReady && state.wasmReady) {
+      dbg("ready \u2014 starting capture");
       startCapture();
     }
   }
-  function captureBinary() {
-    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-    var quality = state.scanType === ScanType.BARCODE ? 0.7 : 0.85;
-    var timestamp = Date.now();
-    var bitmapPromise;
-    if (state.captureCrop) {
-      bitmapPromise = createImageBitmap(
-        video,
-        state.captureCrop.x,
-        state.captureCrop.y,
-        state.captureCrop.w,
-        state.captureCrop.h
-      );
-    } else {
-      bitmapPromise = createImageBitmap(video);
-    }
-    bitmapPromise.then(function(bitmap) {
-      worker.postMessage(
-        { bitmap, quality, timestamp },
-        [bitmap]
-      );
-    }).catch(function(err) {
-      dbg("createImageBitmap error: " + err.message);
-    });
-    state.captureTimer = setTimeout(captureLoop, 1e3 / state.fps);
-  }
-  function captureLegacy() {
-    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-    if (state.captureCrop) {
-      ctx.drawImage(
-        video,
-        state.captureCrop.x,
-        state.captureCrop.y,
-        state.captureCrop.w,
-        state.captureCrop.h,
-        0,
-        0,
-        state.captureWidth,
-        state.captureHeight
-      );
-    } else {
-      ctx.drawImage(video, 0, 0, state.captureWidth, state.captureHeight);
-    }
-    var quality = state.scanType === ScanType.BARCODE ? 0.7 : 0.85;
-    var dataUrl = canvas.toDataURL("image/jpeg", quality);
-    var base64 = dataUrl.split(",")[1];
-    state.ws.send(JSON.stringify({ type: "frame", data: base64, timestamp: Date.now() }));
-    state.captureTimer = setTimeout(captureLoop, 1e3 / state.fps);
-  }
-  function captureWasm() {
+  function captureLoop() {
     if (state.captureCrop) {
       ctx.drawImage(
         video,
@@ -2544,15 +2438,6 @@
     var imageData = ctx.getImageData(0, 0, state.captureWidth, state.captureHeight);
     decodeFrame(imageData);
     state.captureTimer = setTimeout(captureLoop, 1e3 / state.fps);
-  }
-  function captureLoop() {
-    if (isWasmMode()) {
-      captureWasm();
-    } else if (useBinaryPipeline && workerReady) {
-      captureBinary();
-    } else {
-      captureLegacy();
-    }
   }
 
   // modules/camera.js
@@ -2606,7 +2491,7 @@
         canvas2.width = state.captureWidth;
         canvas2.height = state.captureHeight;
         dbg("capture: " + state.captureWidth + "x" + state.captureHeight);
-        status.textContent = state.ws ? "Scanning..." : "Waiting for connection...";
+        status.textContent = "Scanning...";
       });
     }).then(function() {
       initZoomCapabilities();
@@ -2685,180 +2570,6 @@
     });
   }
 
-  // modules/websocket.js
-  var status2 = document.getElementById("status");
-  var CONNECT_TIMEOUT_MS = 6e3;
-  var connectTimer = null;
-  var reconnectTimer = null;
-  function clearConnectTimer() {
-    if (connectTimer) {
-      clearTimeout(connectTimer);
-      connectTimer = null;
-    }
-  }
-  function clearReconnectTimer() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  }
-  var _onAuthFail = null;
-  var _onRateLimit = null;
-  var _onResult = null;
-  function setWSCallbacks(cbs) {
-    _onAuthFail = cbs.onAuthFail;
-    _onRateLimit = cbs.onRateLimit;
-    _onResult = cbs.onResult;
-  }
-  function connectWS() {
-    if (!state.serverUrl) {
-      dbg("ERROR: no serverUrl set");
-      return;
-    }
-    clearReconnectTimer();
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      goOffline("navigator offline");
-      return;
-    }
-    if (state.ws) {
-      dbg("connectWS: closing existing WS before reconnect");
-      state.ws.onclose = null;
-      state.ws.onerror = null;
-      state.ws.close();
-      state.ws = null;
-    }
-    var wsUrl = state.serverUrl.replace(/^http/, "ws") + "/ws?type=" + SCAN_TYPE_NAMES[state.scanType];
-    if (state.config.formats) {
-      wsUrl += "&formats=" + encodeURIComponent(state.config.formats);
-    }
-    dbg("connectWS: " + wsUrl);
-    status2.textContent = "Connecting...";
-    state.ws = new WebSocket(wsUrl);
-    clearConnectTimer();
-    connectTimer = setTimeout(function() {
-      if (!state.wsAuthed) goOffline("connect timeout");
-    }, CONNECT_TIMEOUT_MS);
-    state.ws.onopen = function() {
-      dbg("WS open, sending auth");
-      state.reconnectAttempts = 0;
-      state.ws.send(JSON.stringify({ type: "auth", key: state.apiKey }));
-    };
-    state.ws.onmessage = function(e2) {
-      var msg;
-      try {
-        msg = JSON.parse(e2.data);
-      } catch (err) {
-        dbg("ERROR: invalid WS message \u2014 " + (err ? err.message : "unknown"));
-        return;
-      }
-      if (msg.type === "auth_ok") {
-        dbg("auth OK");
-        clearConnectTimer();
-        status2.textContent = "Scanning...";
-        bridgeReady();
-        state.wsAuthed = true;
-        tryStartCapture();
-        return;
-      }
-      if (msg.type === "result" && msg.data && typeof msg.data === "object") {
-        var raw = msg.data;
-        if (typeof raw.data !== "string" || typeof raw.format !== "string") {
-          dbg("ERROR: malformed result \u2014 missing data or format");
-          return;
-        }
-        dbg("result!");
-        if (_onResult) _onResult(raw);
-        return;
-      }
-      if (msg.type === "throttle" && typeof msg.fps === "number") {
-        state.fps = msg.fps;
-        return;
-      }
-      if (msg.type === "error") {
-        dbg("server error: " + (msg.message || "unknown"));
-        return;
-      }
-    };
-    state.ws.onclose = function(e2) {
-      dbg("WS closed: " + e2.code);
-      clearConnectTimer();
-      stopCapture();
-      state.wsAuthed = false;
-      if (e2.code === 4001 || e2.code === 4029) {
-        state.authRejected = true;
-        state.decodeMode = "ws";
-        clearReconnectTimer();
-        if (e2.code === 4001) {
-          status2.textContent = "Invalid API key";
-          bridgeError("invalid api key");
-          if (!state.isSDKMode && _onAuthFail) _onAuthFail("Invalid API key. Please check and try again.");
-        } else {
-          status2.textContent = "Rate limited";
-          bridgeError("rate limited");
-          if (!state.isSDKMode && _onRateLimit) _onRateLimit("Rate limited. Please wait and try again.");
-        }
-        return;
-      }
-      tryReconnect();
-    };
-    state.ws.onerror = function() {
-      dbg("WS error");
-    };
-  }
-  function closeWS() {
-    clearConnectTimer();
-    clearReconnectTimer();
-    if (state.ws) {
-      state.ws.onclose = null;
-      state.ws.onerror = null;
-      state.ws.close();
-      state.ws = null;
-    }
-    state.reconnectAttempts = 0;
-    state.wsAuthed = false;
-  }
-  function tryReconnect() {
-    if (state.reconnectAttempts >= state.maxReconnectAttempts) {
-      goOffline("reconnect exhausted");
-      return;
-    }
-    state.reconnectAttempts++;
-    var delay = Math.pow(2, state.reconnectAttempts - 1) * 1e3;
-    status2.textContent = "Reconnecting (" + state.reconnectAttempts + "/" + state.maxReconnectAttempts + ")...";
-    clearReconnectTimer();
-    reconnectTimer = setTimeout(connectWS, delay);
-  }
-  async function goOffline(reason) {
-    if (state.decodeMode === "wasm") return;
-    if (state.authRejected) {
-      dbg("offline fallback blocked \u2014 auth was rejected");
-      return;
-    }
-    clearConnectTimer();
-    clearReconnectTimer();
-    if (state.ws) {
-      state.ws.onclose = null;
-      state.ws.onerror = null;
-      state.ws.close();
-      state.ws = null;
-    }
-    dbg("falling back to offline decode: " + reason);
-    status2.textContent = "Offline mode...";
-    var ok = await enableWasmFallback();
-    if (!state.scanActive) {
-      dbg("offline fallback aborted \u2014 scan no longer active");
-      return;
-    }
-    if (ok) {
-      bridgeReady();
-      status2.textContent = "Scanning (offline)...";
-      tryStartCapture();
-    } else {
-      status2.textContent = "Connection lost";
-      bridgeError("offline decode unavailable");
-    }
-  }
-
   // modules/ui.js
   var homeScreen = document.getElementById("home-screen");
   var scannerContainer = document.getElementById("scanner-container");
@@ -2867,7 +2578,6 @@
   var homeResultSection = document.getElementById("home-result");
   var resultDataEl = document.getElementById("result-data");
   var resultFormatEl = document.getElementById("result-format");
-  var apiKeyError = document.getElementById("api-key-error");
   var flashOverlay = document.getElementById("flash-overlay");
   var viewfinder = document.getElementById("viewfinder");
   var scanInstructionText = document.getElementById("scan-instruction-text");
@@ -2887,20 +2597,11 @@
   }
   function showHome() {
     stopCapture();
-    closeWS();
     stopCamera();
     state.cameraReady = false;
-    state.wsAuthed = false;
     state.scanActive = false;
     hideAllScreens();
     homeScreen.classList.remove("hidden");
-  }
-  function showHomeWithError(message) {
-    showHome();
-    if (apiKeyError) {
-      apiKeyError.textContent = message;
-      apiKeyError.classList.remove("hidden");
-    }
   }
   function showResultOnHome(data) {
     if (!homeResultSection) return;
@@ -2956,11 +2657,7 @@
   function initHomeScreen(onStartScan) {
     var scanTypeBtns = document.querySelectorAll(".scan-type-btn");
     var btnStartScan = document.getElementById("btn-start-scan");
-    var inputApiKey = document.getElementById("input-api-key");
     var toggleSkipTutorial = document.getElementById("toggle-skip-tutorial");
-    if (inputApiKey && state.apiKey) {
-      inputApiKey.value = state.apiKey;
-    }
     if (toggleSkipTutorial) {
       toggleSkipTutorial.checked = state.config.skipTutorial;
       toggleSkipTutorial.addEventListener("change", function() {
@@ -2983,20 +2680,7 @@
     });
     if (btnStartScan) {
       btnStartScan.addEventListener("click", function() {
-        var keyValue = inputApiKey ? inputApiKey.value.trim() : "";
-        if (!keyValue) {
-          if (apiKeyError) apiKeyError.classList.remove("hidden");
-          if (inputApiKey) inputApiKey.focus();
-          return;
-        }
-        if (apiKeyError) apiKeyError.classList.add("hidden");
-        state.apiKey = keyValue;
         onStartScan();
-      });
-    }
-    if (inputApiKey) {
-      inputApiKey.addEventListener("input", function() {
-        if (apiKeyError) apiKeyError.classList.add("hidden");
       });
     }
   }
@@ -3018,15 +2702,6 @@
     showResultOnHome(data);
     showHome();
   }
-  setWSCallbacks({
-    onAuthFail: function(msg) {
-      showHomeWithError(msg);
-    },
-    onRateLimit: function(msg) {
-      showHomeWithError(msg);
-    },
-    onResult: handleResult
-  });
   setDecodeCallbacks({ onResult: handleResult });
   function startScannerFlow() {
     if (state.scanActive) {
@@ -3036,11 +2711,7 @@
     state.scanActive = true;
     dbg("startScannerFlow: type=" + state.scanType);
     state.cameraReady = false;
-    state.wsAuthed = false;
-    state.decodeMode = "ws";
-    state.reconnectAttempts = 0;
     state.readySignaled = false;
-    state.authRejected = false;
     state.fps = state.scanType === ScanType.BARCODE ? 10 : 5;
     applyViewfinderMode();
     openCamera().then(function() {
@@ -3052,11 +2723,15 @@
       state.scanActive = false;
       bridgeError("camera error: " + (err ? err.message : "unknown"));
     });
-    if (state.serverUrl) {
-      connectWS();
-    } else {
-      goOffline("no server url");
-    }
+    ensureDecoder().then(function(ok) {
+      if (!state.scanActive) return;
+      if (ok) {
+        bridgeReady();
+        tryStartCapture();
+      } else {
+        bridgeError("decoder unavailable");
+      }
+    });
   }
   function proceedToScanner() {
     showScanner();
@@ -3127,9 +2802,7 @@
     applyZoom(state.currentZoom - state.zoomStep);
   });
   window.ScannerInit = function(opts) {
-    dbg("ScannerInit: serverUrl=" + opts.serverUrl + " type=" + opts.type);
-    state.apiKey = opts.key || "";
-    state.serverUrl = opts.serverUrl || "";
+    dbg("ScannerInit: type=" + opts.type);
     if (typeof opts.type === "number") {
       state.scanType = opts.type;
     }
@@ -3150,8 +2823,6 @@
         showTutorial();
         bridgeReady();
       }
-    } else if (!state.wsAuthed) {
-      connectWS();
     }
   };
   window.ScannerUpdateConfig = function(updates) {
@@ -3168,21 +2839,13 @@
     if (typeof c2.formats === "string") state.config.formats = c2.formats;
     dbg("ScannerUpdateConfig: " + JSON.stringify(state.config));
   };
-  window.ScannerSetAPIKey = function(key) {
-    state.apiKey = key;
-    if (state.serverUrl) {
-      connectWS();
-    }
-  };
   dbg("page loaded, secure=" + window.isSecureContext + " proto=" + location.protocol + " mode=" + state.mode);
   if (state.isSDKMode) {
     dbg("SDK mode \u2014 waiting for ScannerInit...");
   }
   initEmbed(function onStop() {
     stopCapture();
-    terminateWorker();
     stopCamera();
-    closeWS();
     state.scanActive = false;
   });
 })();

@@ -1,45 +1,12 @@
 "use strict";
 
-import { state, ScanType } from "./state.js";
+import { state } from "./state.js";
 import { dbg } from "./debug.js";
-import { isWasmMode, decodeFrame } from "./decode.js";
+import { decodeFrame } from "./decode.js";
 
 var video = document.getElementById("video");
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
-
-// ── Feature detection ──────────────────────────────────
-var HAS_OFFSCREEN_CANVAS = typeof OffscreenCanvas !== "undefined";
-var HAS_CREATE_IMAGE_BITMAP = typeof createImageBitmap === "function";
-var useBinaryPipeline = HAS_OFFSCREEN_CANVAS && HAS_CREATE_IMAGE_BITMAP;
-
-// ── Worker setup ───────────────────────────────────────
-var worker = null;
-var workerReady = false;
-
-if (useBinaryPipeline) {
-    try {
-        worker = new Worker("capture-worker.js");
-        worker.onmessage = function (e) {
-            // Worker returns ArrayBuffer — send binary over WS
-            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                state.ws.send(e.data);
-            }
-        };
-        worker.onerror = function (err) {
-            dbg("worker error: " + err.message + " — falling back to legacy");
-            useBinaryPipeline = false;
-            workerReady = false;
-        };
-        workerReady = true;
-        dbg("capture: binary pipeline (OffscreenCanvas + Worker)");
-    } catch (err) {
-        dbg("worker init failed: " + err.message + " — falling back to legacy");
-        useBinaryPipeline = false;
-    }
-} else {
-    dbg("capture: legacy pipeline (toDataURL + JSON)");
-}
 
 /**
  * Map viewfinder screen rect to video pixel coordinates.
@@ -96,89 +63,24 @@ export function stopCapture() {
     }
 }
 
-export function terminateWorker() {
-    if (worker) {
-        worker.terminate();
-        worker = null;
-        workerReady = false;
-    }
-}
-
 /**
- * Ready gate — starts capture only when BOTH camera and WebSocket are ready.
- * Called from camera.js (after openCamera) and websocket.js (after auth_ok).
+ * Ready gate — starts capture only when BOTH the camera and the on-device
+ * decoder are ready. Called from camera.js (after openCamera) and main.js
+ * (after the wasm decoder loads).
  */
 export function tryStartCapture() {
-    // Gate: camera + the CURRENTLY selected decode backend. Online needs WS
-    // auth; offline fallback needs the wasm reader loaded. Checking the active
-    // backend (not "either") avoids a stale wasmReady from a prior offline
-    // session starting capture before the WS reauths on a later online restart.
-    var backendReady = isWasmMode() ? state.wasmReady : state.wsAuthed;
-    if (state.cameraReady && backendReady) {
-        dbg("ready — starting capture (" + state.decodeMode + ")");
+    if (state.cameraReady && state.wasmReady) {
+        dbg("ready — starting capture");
         startCapture();
     }
 }
 
-// ── Binary pipeline ────────────────────────────────────
-// createImageBitmap crops directly from video (no canvas needed on main thread).
-// Worker encodes JPEG via OffscreenCanvas — main thread stays free.
+// ── Capture loop ───────────────────────────────────────
+// Decode each frame on-device. Draw the (cropped) frame to the 2D canvas and
+// hand the raw ImageData to zxing-wasm. decodeFrame is internally throttled, so
+// a slow decode just drops the next frame.
 
-function captureBinary() {
-    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-
-    var quality = state.scanType === ScanType.BARCODE ? 0.7 : 0.85;
-    var timestamp = Date.now();
-    var bitmapPromise;
-
-    if (state.captureCrop) {
-        bitmapPromise = createImageBitmap(video,
-            state.captureCrop.x, state.captureCrop.y,
-            state.captureCrop.w, state.captureCrop.h);
-    } else {
-        bitmapPromise = createImageBitmap(video);
-    }
-
-    bitmapPromise.then(function (bitmap) {
-        // Transfer bitmap to worker — zero-copy
-        worker.postMessage(
-            { bitmap: bitmap, quality: quality, timestamp: timestamp },
-            [bitmap]
-        );
-    }).catch(function (err) {
-        dbg("createImageBitmap error: " + err.message);
-    });
-
-    state.captureTimer = setTimeout(captureLoop, 1000 / state.fps);
-}
-
-// ── Legacy pipeline (fallback) ─────────────────────────
-// toDataURL + base64 + JSON — works on all browsers.
-
-function captureLegacy() {
-    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-
-    if (state.captureCrop) {
-        ctx.drawImage(video,
-            state.captureCrop.x, state.captureCrop.y, state.captureCrop.w, state.captureCrop.h,
-            0, 0, state.captureWidth, state.captureHeight);
-    } else {
-        ctx.drawImage(video, 0, 0, state.captureWidth, state.captureHeight);
-    }
-
-    var quality = state.scanType === ScanType.BARCODE ? 0.7 : 0.85;
-    var dataUrl = canvas.toDataURL("image/jpeg", quality);
-    var base64 = dataUrl.split(",")[1];
-    state.ws.send(JSON.stringify({ type: "frame", data: base64, timestamp: Date.now() }));
-    state.captureTimer = setTimeout(captureLoop, 1000 / state.fps);
-}
-
-// ── WASM pipeline (offline fallback) ───────────────────
-// Decode the frame on-device — no socket, no JPEG encode. Draw the (cropped)
-// frame to the 2D canvas and hand the raw ImageData to zxing-wasm. decodeFrame
-// is internally throttled, so a slow decode just drops the next frame.
-
-function captureWasm() {
+function captureLoop() {
     if (state.captureCrop) {
         ctx.drawImage(video,
             state.captureCrop.x, state.captureCrop.y, state.captureCrop.w, state.captureCrop.h,
@@ -190,16 +92,4 @@ function captureWasm() {
     var imageData = ctx.getImageData(0, 0, state.captureWidth, state.captureHeight);
     decodeFrame(imageData);
     state.captureTimer = setTimeout(captureLoop, 1000 / state.fps);
-}
-
-// ── Unified loop ───────────────────────────────────────
-
-function captureLoop() {
-    if (isWasmMode()) {
-        captureWasm();
-    } else if (useBinaryPipeline && workerReady) {
-        captureBinary();
-    } else {
-        captureLegacy();
-    }
 }

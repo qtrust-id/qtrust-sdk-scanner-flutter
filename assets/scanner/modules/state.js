@@ -25,7 +25,7 @@ export var Theme = { DARK: 0, LIGHT: 1 };
 /** @enum {number} */
 export var Locale = { ID: 0, EN: 1 };
 
-/** Map ScanType enum to WS query param string */
+/** Map ScanType enum to canonical name string */
 export var SCAN_TYPE_NAMES = ["qr", "barcode"];
 
 /**
@@ -45,8 +45,6 @@ function parseScanType(raw) {
 export var state = {
     scanType: parseScanType(bootParam("type")),
     mode: bootParam("mode") || "home",
-    apiKey: bootParam("key") || "",
-    serverUrl: "",
     isSDKMode: false,
 
     // Embed (web SDK) — loaded inside an iframe with ?embed=1. The web SDK
@@ -76,25 +74,13 @@ export var state = {
     zoomStep: 0.5,
     hasNativeZoom: false,
 
-    // WebSocket
-    ws: null,
+    // Capture frame rate (frames/sec handed to the on-device decoder).
     fps: 5,
-    reconnectAttempts: 0,
-    maxReconnectAttempts: 3,
 
-    // Decode backend — "ws" = cloud decode (primary), "wasm" = on-device
-    // zxing-wasm fallback, used when the cloud is unreachable (offline mode).
-    decodeMode: "ws",
+    // On-device decode backend (zxing-wasm). Loaded lazily on first scan.
     wasmReady: false,
 
-    // Auth-rejection latch — set when the server reachably rejects the key
-    // (WS close 4001/4029). Once set, offline fallback is forbidden for the rest
-    // of the session, even if a connect-timeout fallback raced ahead of the
-    // close frame. Prevents bypassing API-key auth via the offline path.
-    authRejected: false,
-
-    // Ready-signal latch — bridgeReady() must fire at most once per scan session
-    // (auth_ok and a later goOffline could otherwise both signal ready).
+    // Ready-signal latch — bridgeReady() must fire at most once per scan session.
     readySignaled: false,
 
     // Capture
@@ -103,9 +89,8 @@ export var state = {
     captureHeight: 0,
     captureCrop: null,
 
-    // Ready gate — parallel init requires both before capture starts
+    // Ready gate — capture starts once the camera and decoder are both ready.
     cameraReady: false,
-    wsAuthed: false,
 
     // Idempotency guard — a repeated ScannerInit (the web SDK fires sdk_init on
     // start + iframe load + sdk_ready to beat load-order races) must NOT re-open
@@ -117,8 +102,3 @@ export var state = {
 // the host (their own "home"), exactly like native: embed implies SDK mode.
 state.isEmbed = bootParam("embed") === "1";
 state.isSDKMode = state.mode === "sdk" || state.isEmbed;
-
-// Default server URL from current host when served over HTTP
-if (location.protocol !== "file:") {
-    state.serverUrl = location.protocol + "//" + location.host;
-}

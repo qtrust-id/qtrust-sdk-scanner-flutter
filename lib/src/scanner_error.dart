@@ -1,6 +1,6 @@
 /// Kinds of failure that can occur during a scan session.
 enum ScannerErrorKind {
-  /// WebSocket or network connection failed.
+  /// Scanner page or assets failed to load.
   connectionFailed,
 
   /// Camera permission was denied by the user.

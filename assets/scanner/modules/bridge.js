@@ -30,8 +30,7 @@ export function bridgeError(message) {
 }
 
 export function bridgeReady() {
-    // Fire at most once per scan session — the WS auth_ok path and a later
-    // offline fallback (goOffline) can both reach here. Reset in startScannerFlow.
+    // Fire at most once per scan session. Reset in startScannerFlow.
     if (state.readySignaled) return;
     state.readySignaled = true;
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scannerBridge) {

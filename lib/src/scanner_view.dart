@@ -17,7 +17,7 @@ import 'scanner_error.dart';
 ///
 /// ```dart
 /// QtrustScannerView(
-///   config: ScannerConfig(apiKey: 'sk_live_...'),
+///   config: ScannerConfig(),
 ///   type: ScanType.qr,
 ///   onResult: (r) => print(r.data),
 ///   onError: (e) => print(e.message),
@@ -38,7 +38,7 @@ class QtrustScannerView extends StatefulWidget {
     this.onClose,
   });
 
-  /// Scanner service configuration (API key, base URL, vendor settings).
+  /// Scanner configuration (timeout, vendor settings).
   final ScannerConfig config;
 
   /// Type of code to scan.
@@ -227,24 +227,19 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
       onReceivedHttpError: (controller, request, response) {
         if (request.isForMainFrame != true) return;
         final code = response.statusCode ?? 0;
-        final msg = switch (code) {
-          401 => 'Invalid or missing API key',
-          403 => 'Access forbidden',
-          _ => 'Server error (HTTP $code)',
-        };
-        widget.onError?.call(ScannerError.connectionFailed(msg));
+        widget.onError?.call(
+          ScannerError.connectionFailed('Failed to load scanner (HTTP $code)'),
+        );
         if (mounted && !_ready) setState(() => _ready = true);
       },
     );
   }
 
   /// Builds the `window.ScannerInit(payload)` call. The payload is JSON-encoded
-  /// so every string (API key, vendor fields) is fully escaped — hand-rolled
-  /// quoting could break the literal or inject code.
+  /// so every vendor string is fully escaped — hand-rolled quoting could break
+  /// the literal or inject code.
   String _buildInitJs() {
     final payload = jsonEncode({
-      'key': widget.config.apiKey,
-      'serverUrl': widget.config.baseUrl,
       'type': widget.type.value,
       'config': widget.config.vendorConfig.toJson(),
     });

@@ -4,12 +4,11 @@ import { state, ScanType } from "./modules/state.js";
 import { dbg } from "./modules/debug.js";
 import { bridgeResult, bridgeError, bridgeClose, bridgeReady } from "./modules/bridge.js";
 import { openCamera, toggleFlash, applyZoom, stopCamera } from "./modules/camera.js";
-import { tryStartCapture, stopCapture, terminateWorker } from "./modules/capture.js";
-import { connectWS, setWSCallbacks, closeWS, goOffline } from "./modules/websocket.js";
-import { setDecodeCallbacks } from "./modules/decode.js";
+import { tryStartCapture, stopCapture } from "./modules/capture.js";
+import { setDecodeCallbacks, ensureDecoder } from "./modules/decode.js";
 import { initEmbed } from "./modules/embed.js";
 import {
-    showScanner, showHome, showHomeWithError, showResultOnHome,
+    showScanner, showHome, showResultOnHome,
     showFlash, showTutorial, applyViewfinderMode,
     initHomeScreen, initTutorialScreen, initResultScreen
 } from "./modules/ui.js";
@@ -24,10 +23,8 @@ import {
 })();
 
 // ── Cross-module wiring ────────────────────────────────
-// websocket.js / decode.js cannot import ui.js (would create circular dep),
-// so result/error callbacks are injected here. The result handler is identical
-// for both decode backends (cloud WS and on-device wasm) — callers never need
-// to know which produced the result.
+// decode.js cannot import ui.js (would create circular dep), so the result
+// callback is injected here.
 function handleResult(data) {
     // SDK mode (native WebView + web-SDK iframe) hands the raw result to the host
     // and lets it own result presentation. Skip the white flash overlay — it
@@ -43,21 +40,10 @@ function handleResult(data) {
     showHome();
 }
 
-setWSCallbacks({
-    onAuthFail: function (msg) {
-        showHomeWithError(msg);
-    },
-    onRateLimit: function (msg) {
-        showHomeWithError(msg);
-    },
-    onResult: handleResult,
-});
-
-// Offline (on-device wasm) decode shares the same result handler.
 setDecodeCallbacks({ onResult: handleResult });
 
 // ── Scanner flow (PARALLEL init) ───────────────────────
-// Camera open and WebSocket connect run simultaneously.
+// Camera open and on-device decoder load run simultaneously.
 // Capture starts only when BOTH are ready (ready gate in capture.js).
 
 function startScannerFlow() {
@@ -72,15 +58,8 @@ function startScannerFlow() {
     state.scanActive = true;
     dbg("startScannerFlow: type=" + state.scanType);
     state.cameraReady = false;
-    state.wsAuthed = false;
-    // Online is primary: each (re)start attempts the cloud first, falling back
-    // to on-device decode only if it proves unreachable (see websocket.js).
-    state.decodeMode = "ws";
-    // Per-session latches — clear stale values from a prior scan so the reconnect
-    // budget, ready signal, and auth-rejection guard all start fresh.
-    state.reconnectAttempts = 0;
+    // Per-session latch — clear the ready signal from a prior scan.
     state.readySignaled = false;
-    state.authRejected = false;
     state.fps = state.scanType === ScanType.BARCODE ? 10 : 5;
     applyViewfinderMode();
 
@@ -96,13 +75,16 @@ function startScannerFlow() {
         bridgeError("camera error: " + (err ? err.message : "unknown"));
     });
 
-    // WebSocket — marks wsAuthed on auth_ok (inside websocket.js).
-    // No server configured → go straight to on-device decode.
-    if (state.serverUrl) {
-        connectWS();
-    } else {
-        goOffline("no server url");
-    }
+    // On-device decoder — marks wasmReady once the zxing-wasm module loads.
+    ensureDecoder().then(function (ok) {
+        if (!state.scanActive) return;  // stopped while loading — don't resurrect
+        if (ok) {
+            bridgeReady();
+            tryStartCapture();
+        } else {
+            bridgeError("decoder unavailable");
+        }
+    });
 }
 
 // ── Proceed to scanner (shared by tutorial + skip path) ─
@@ -182,10 +164,8 @@ btnZoomOut.addEventListener("click", function () { applyZoom(state.currentZoom -
 
 // ── Native bridge API ──────────────────────────────────
 /**
- * Called by host app: ScannerInit({ key, serverUrl, type, config })
+ * Called by host app: ScannerInit({ type, config })
  * @param {Object} opts
- * @param {string}  opts.key       — API key
- * @param {string}  opts.serverUrl — WebSocket server URL
  * @param {number}  opts.type      — ScanType enum (0=QR, 1=BARCODE)
  * @param {Object} [opts.config]   — Vendor config
  * @param {string} [opts.config.vendorId]
@@ -196,9 +176,7 @@ btnZoomOut.addEventListener("click", function () { applyZoom(state.currentZoom -
  * @param {string} [opts.config.formats]       — per-vendor symbology override, e.g. "PDF417|QRCode" (empty=default per type)
  */
 window.ScannerInit = function (opts) {
-    dbg("ScannerInit: serverUrl=" + opts.serverUrl + " type=" + opts.type);
-    state.apiKey = opts.key || "";
-    state.serverUrl = opts.serverUrl || "";
+    dbg("ScannerInit: type=" + opts.type);
     if (typeof opts.type === "number") {
         state.scanType = opts.type;
     }
@@ -224,8 +202,6 @@ window.ScannerInit = function (opts) {
             showTutorial();
             bridgeReady();
         }
-    } else if (!state.wsAuthed) {
-        connectWS();
     }
 };
 
@@ -249,12 +225,6 @@ window.ScannerUpdateConfig = function (updates) {
     dbg("ScannerUpdateConfig: " + JSON.stringify(state.config));
 };
 
-// Legacy compat
-window.ScannerSetAPIKey = function (key) {
-    state.apiKey = key;
-    if (state.serverUrl) { connectWS(); }
-};
-
 // ── Boot ───────────────────────────────────────────────
 dbg("page loaded, secure=" + window.isSecureContext + " proto=" + location.protocol + " mode=" + state.mode);
 
@@ -271,8 +241,6 @@ if (state.isSDKMode) {
 initEmbed(function onStop() {
     // qtrust:sdk_stop — fully tear down so a later sdk_init can cleanly restart.
     stopCapture();
-    terminateWorker();
     stopCamera();
-    closeWS();
     state.scanActive = false;  // allow a subsequent sdk_init to start fresh
 });

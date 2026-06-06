@@ -1,11 +1,10 @@
 "use strict";
 
-// On-device decode backend (offline fallback).
+// On-device decode backend.
 //
-// The primary path is cloud decode over WebSocket (see websocket.js). When the
-// cloud is unreachable, the page falls back to decoding frames locally with a
-// vendored zxing-wasm build (assets/zxing/). Both backends emit the SAME result
-// shape so consumers (native SDK / web SDK) don't care which produced it:
+// All decoding happens locally in the browser/WebView with a vendored zxing-wasm
+// build (assets/zxing/). No network, no server — the page is fully self-contained.
+// Result shape handed to consumers (native SDK / web SDK):
 //   { data, format, bounding_box: { x, y, width, height } }
 
 import { state, ScanType } from "./state.js";
@@ -28,9 +27,8 @@ var decoding = false;
 var onResultCb = null;
 
 // ── Symbology sets ─────────────────────────────────────
-// Mirror the server defaults in cloud/internal/decoder/zxingcpp.go so offline
-// parity matches online. zxing-wasm accepts both canonical names ("QRCode")
-// and HRI labels ("EAN-13"), so the per-vendor formats string passes through.
+// zxing-wasm accepts both canonical names ("QRCode") and HRI labels ("EAN-13"),
+// so the per-vendor formats string passes through unchanged.
 var QR_FORMATS = ["QRCode", "MicroQRCode", "Aztec", "DataMatrix"];
 var BARCODE_FORMATS = ["PDF417", "EAN-13", "EAN-8", "Code128", "Code39", "Codabar", "ITF", "UPC-A", "UPC-E"];
 
@@ -61,18 +59,12 @@ export function setDecodeCallbacks(cbs) {
     onResultCb = cbs.onResult;
 }
 
-/** @returns {boolean} true when the on-device backend is active. */
-export function isWasmMode() {
-    return state.decodeMode === "wasm";
-}
-
 /**
- * Switch to on-device decode and ensure the wasm module is loaded.
+ * Ensure the wasm decoder module is loaded.
  * Idempotent — repeated calls after a successful load resolve instantly.
  * @returns {Promise<boolean>} true if the backend is ready to decode.
  */
-export async function enableWasmFallback() {
-    state.decodeMode = "wasm";
+export async function ensureDecoder() {
     if (state.wasmReady) return true;
     try {
         await loadWasm();

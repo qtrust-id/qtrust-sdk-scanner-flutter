@@ -1,13 +1,14 @@
 # QTrust Scanner — Flutter SDK
 
-Cloud-based QR & barcode scanner for Flutter. Drop in a widget, pass your API
-key, and receive decoded results via callback.
+On-device QR & barcode scanner for Flutter. Drop in a widget and receive decoded
+results via callback. No server URL — scanning runs entirely on the
+device.
 
 The SDK vendors the scanner web UI locally and serves it over a `localhost`
-secure origin inside a WebView. Scanning works offline; the page still tries the
-cloud WebSocket first and only falls back to the on-device decoder when the
-cloud is unreachable. This mirrors the Android (`sdk-android`) and iOS
-(`sdk-ios`) SDKs — all three vendor the same web bundle from `cloud/web`.
+secure origin inside a WebView. Decoding runs fully on-device via the bundled
+zxing-wasm decoder — no network is used. This mirrors the Android
+(`sdk-android`) and iOS (`sdk-ios`) SDKs — all three vendor the same web bundle
+from `cloud/web`.
 
 ## Why a WebView + localhost
 
@@ -60,8 +61,7 @@ import 'package:qtrust_scanner/qtrust_scanner.dart';
 
 QtrustScannerView(
   config: ScannerConfig(
-    apiKey: 'sk_live_...',
-    // baseUrl, timeout, vendorConfig are optional
+    // timeout, vendorConfig are optional — scanning is fully on-device
   ),
   type: ScanType.qr,            // or ScanType.barcode
   onResult: (result) {
@@ -102,8 +102,6 @@ final result = await Navigator.of(context).push<ScanResult>(
 
 | Field | Default | Meaning |
 |---|---|---|
-| `apiKey` | — (required) | API key for the scanner service |
-| `baseUrl` | `https://scan.qtrust.id` | Cloud service base URL |
 | `timeout` | `30s` | Max wait for a result (one-shot flows) |
 | `vendorConfig` | `VendorConfig()` | Vendor UI settings |
 

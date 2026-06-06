@@ -2,7 +2,6 @@
 
 import { state, ScanType } from "./state.js";
 import { stopCapture } from "./capture.js";
-import { closeWS } from "./websocket.js";
 import { stopCamera } from "./camera.js";
 
 var homeScreen = document.getElementById("home-screen");
@@ -12,7 +11,6 @@ var resultScreen = document.getElementById("result-screen");
 var homeResultSection = document.getElementById("home-result");
 var resultDataEl = document.getElementById("result-data");
 var resultFormatEl = document.getElementById("result-format");
-var apiKeyError = document.getElementById("api-key-error");
 var flashOverlay = document.getElementById("flash-overlay");
 var viewfinder = document.getElementById("viewfinder");
 var scanInstructionText = document.getElementById("scan-instruction-text");
@@ -36,21 +34,11 @@ export function showTutorial() {
 
 export function showHome() {
     stopCapture();
-    closeWS();
     stopCamera();
     state.cameraReady = false;
-    state.wsAuthed = false;
     state.scanActive = false;  // pipeline down — allow a fresh start
     hideAllScreens();
     homeScreen.classList.remove("hidden");
-}
-
-export function showHomeWithError(message) {
-    showHome();
-    if (apiKeyError) {
-        apiKeyError.textContent = message;
-        apiKeyError.classList.remove("hidden");
-    }
 }
 
 export function showResultOnHome(data) {
@@ -129,13 +117,7 @@ export function initTutorialScreen(onStartScan, onBack) {
 export function initHomeScreen(onStartScan) {
     var scanTypeBtns = document.querySelectorAll(".scan-type-btn");
     var btnStartScan = document.getElementById("btn-start-scan");
-    var inputApiKey = document.getElementById("input-api-key");
     var toggleSkipTutorial = document.getElementById("toggle-skip-tutorial");
-
-    // Pre-fill API key from URL param
-    if (inputApiKey && state.apiKey) {
-        inputApiKey.value = state.apiKey;
-    }
 
     // Sync toggles with state defaults
     if (toggleSkipTutorial) {
@@ -161,21 +143,7 @@ export function initHomeScreen(onStartScan) {
 
     if (btnStartScan) {
         btnStartScan.addEventListener("click", function () {
-            var keyValue = inputApiKey ? inputApiKey.value.trim() : "";
-            if (!keyValue) {
-                if (apiKeyError) apiKeyError.classList.remove("hidden");
-                if (inputApiKey) inputApiKey.focus();
-                return;
-            }
-            if (apiKeyError) apiKeyError.classList.add("hidden");
-            state.apiKey = keyValue;
             onStartScan();
-        });
-    }
-
-    if (inputApiKey) {
-        inputApiKey.addEventListener("input", function () {
-            if (apiKeyError) apiKeyError.classList.add("hidden");
         });
     }
 }

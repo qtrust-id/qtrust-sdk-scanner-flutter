@@ -73,19 +73,13 @@ class VendorConfig {
 }
 
 /// Configuration for a [Scanner] instance.
+///
+/// Scanning runs fully on-device — no server URL is required.
 class ScannerConfig {
   const ScannerConfig({
-    required this.apiKey,
-    this.baseUrl = defaultBaseUrl,
     this.timeout = defaultTimeout,
     this.vendorConfig = const VendorConfig(),
   });
-
-  /// API key for authenticating with the scanner service.
-  final String apiKey;
-
-  /// Base HTTPS URL of the scanner service.
-  final String baseUrl;
 
   /// Maximum time to wait for a scan result (used by one-shot [Scanner.scan]).
   final Duration timeout;
@@ -95,19 +89,14 @@ class ScannerConfig {
 
   /// Returns a copy with the given fields replaced. Preserves immutability.
   ScannerConfig copyWith({
-    String? apiKey,
-    String? baseUrl,
     Duration? timeout,
     VendorConfig? vendorConfig,
   }) {
     return ScannerConfig(
-      apiKey: apiKey ?? this.apiKey,
-      baseUrl: baseUrl ?? this.baseUrl,
       timeout: timeout ?? this.timeout,
       vendorConfig: vendorConfig ?? this.vendorConfig,
     );
   }
 
-  static const String defaultBaseUrl = 'https://scan.qtrust.id';
   static const Duration defaultTimeout = Duration(seconds: 30);
 }

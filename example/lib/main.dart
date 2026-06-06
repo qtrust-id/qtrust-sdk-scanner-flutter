@@ -3,14 +3,6 @@ import 'package:qtrust_scanner/qtrust_scanner.dart';
 
 void main() => runApp(const ExampleApp());
 
-/// Replace with your actual API key.
-const String _apiKey = 'sk_live_test';
-
-/// WebSocket scanner backend — same host the iOS/Android samples target.
-/// `onReady` only fires after this server auths the API key; an unreachable
-/// host stalls behind the offline-fallback timeout (slow start).
-const String _baseUrl = 'https://scanner.noersy.my.id';
-
 class ExampleApp extends StatelessWidget {
   const ExampleApp({super.key});
 
@@ -61,8 +53,6 @@ class _HomePageState extends State<HomePage> {
     // The scanner WebView triggers the native camera prompt itself via
     // getUserMedia (NSCameraUsageDescription on iOS, CAMERA on Android).
     final config = ScannerConfig(
-      apiKey: _apiKey,
-      baseUrl: _baseUrl,
       vendorConfig: VendorConfig(skipTutorial: _skipTutorial),
     );
     await Navigator.of(context).push<void>(

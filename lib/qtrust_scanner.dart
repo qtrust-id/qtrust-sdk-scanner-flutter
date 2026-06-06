@@ -1,11 +1,11 @@
 /// QTrust Scanner — Flutter SDK.
 ///
-/// Cloud-based QR & barcode scanner. Drop [QtrustScannerView] into your widget
+/// On-device QR & barcode scanner. Drop [QtrustScannerView] into your widget
 /// tree, pass a [ScannerConfig], and receive decoded [ScanResult]s via callback.
 ///
 /// The SDK bundles the scanner web UI locally and serves it over a localhost
-/// secure origin, so scanning works offline; it still tries the cloud WebSocket
-/// first and only falls back to the on-device decoder when unreachable.
+/// secure origin. Decoding runs fully on-device via the bundled zxing-wasm
+/// decoder — no server URL or network is involved.
 library qtrust_scanner;
 
 export 'src/scan_result.dart';
