@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:meta/meta.dart';
+
 import '../scan_result.dart';
+import '../scan_type.dart';
 import '../scanner_error.dart';
 
 /// Name of the JavaScript handler registered on the WebView. The injected
@@ -20,7 +23,9 @@ const String bridgeShimJs = '''
         type: type,
         payload: payload,
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error('[ScannerBridge] callHandler failed:', e);
+    }
   }
   window.ScannerBridge = {
     onResult: function (json) { send('result', json); },
@@ -33,29 +38,54 @@ const String bridgeShimJs = '''
 
 /// Document-start script injecting `window.__SCANNER_BOOT__` so the page boots
 /// headless in SDK mode (no home/tutorial screens). Mirrors the iOS boot shim.
-String bootShimJs(int scanType) =>
-    'window.__SCANNER_BOOT__={mode:"sdk",type:$scanType};';
+String bootShimJs(ScanType scanType) =>
+    'window.__SCANNER_BOOT__={mode:"sdk",type:${scanType.value}};';
 
 /// Routes bridge messages from the WebView to typed callbacks. One instance per
 /// scan session; [tearDown] drops all callbacks so a destroyed view emits
 /// nothing further.
+@internal
 class ScannerBridge {
   ScannerBridge({
-    this.onResult,
-    this.onError,
-    this.onReady,
-    this.onClose,
-  });
+    void Function(ScanResult result)? onResult,
+    void Function(ScannerError error)? onError,
+    void Function()? onReady,
+    void Function()? onClose,
+  })  : _onResult = onResult,
+        _onError = onError,
+        _onReady = onReady,
+        _onClose = onClose;
 
-  void Function(ScanResult result)? onResult;
-  void Function(ScannerError error)? onError;
-  void Function()? onReady;
-  void Function()? onClose;
+  void Function(ScanResult result)? _onResult;
+  void Function(ScannerError error)? _onError;
+  void Function()? _onReady;
+  void Function()? _onClose;
+
+  bool _torn = false;
+
+  // Convenience setters kept for backwards-compatibility with the widget's
+  // initState wiring. Write is a no-op after tearDown.
+  set onResult(void Function(ScanResult result)? fn) {
+    if (!_torn) _onResult = fn;
+  }
+
+  set onError(void Function(ScannerError error)? fn) {
+    if (!_torn) _onError = fn;
+  }
+
+  set onReady(void Function()? fn) {
+    if (!_torn) _onReady = fn;
+  }
+
+  set onClose(void Function()? fn) {
+    if (!_torn) _onClose = fn;
+  }
 
   /// Handles a `{type, payload}` envelope from the JS shim. `args` is the
   /// argument list passed to the flutter_inappwebview handler; the first entry
   /// is the envelope map.
   void handle(List<dynamic> args) {
+    if (_torn) return;
     if (args.isEmpty) return;
     final envelope = args.first;
     if (envelope is! Map) return;
@@ -63,20 +93,28 @@ class ScannerBridge {
     final type = envelope['type'];
     final payload = envelope['payload'];
 
+    if (type is! String) {
+      _onError?.call(
+        ScannerError.serverError('Unexpected bridge envelope type: $type'),
+      );
+      return;
+    }
+
     switch (type) {
       case 'result':
         _handleResult(payload);
-        break;
       case 'error':
-        onError
-            ?.call(ScannerError.serverError(payload?.toString() ?? 'unknown'));
-        break;
+        _onError?.call(
+          ScannerError.serverError(payload?.toString() ?? 'unknown'),
+        );
       case 'ready':
-        onReady?.call();
-        break;
+        _onReady?.call();
       case 'close':
-        onClose?.call();
-        break;
+        _onClose?.call();
+      default:
+        _onError?.call(
+          ScannerError.serverError('Unknown bridge message type: $type'),
+        );
     }
   }
 
@@ -86,14 +124,14 @@ class ScannerBridge {
     try {
       final decoded = jsonDecode(payload?.toString() ?? '');
       if (decoded is! Map<String, dynamic>) {
-        onError?.call(
+        _onError?.call(
           const ScannerError.serverError('Malformed result: not an object'),
         );
         return;
       }
-      onResult?.call(ScanResult.fromJson(decoded));
+      _onResult?.call(ScanResult.fromJson(decoded));
     } on FormatException catch (e) {
-      onError?.call(
+      _onError?.call(
         ScannerError.serverError('Failed to parse result: ${e.message}'),
       );
     }
@@ -101,9 +139,10 @@ class ScannerBridge {
 
   /// Drops all callbacks. Idempotent.
   void tearDown() {
-    onResult = null;
-    onError = null;
-    onReady = null;
-    onClose = null;
+    _torn = true;
+    _onResult = null;
+    _onError = null;
+    _onReady = null;
+    _onClose = null;
   }
 }

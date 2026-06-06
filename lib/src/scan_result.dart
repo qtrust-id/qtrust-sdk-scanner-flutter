@@ -24,6 +24,19 @@ class BoundingBox {
       height: asInt(json['height']),
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BoundingBox &&
+          runtimeType == other.runtimeType &&
+          x == other.x &&
+          y == other.y &&
+          width == other.width &&
+          height == other.height;
+
+  @override
+  int get hashCode => Object.hash(x, y, width, height);
 }
 
 /// Decoded scan result from the scanner service.
@@ -54,4 +67,16 @@ class ScanResult {
           : const BoundingBox(x: 0, y: 0, width: 0, height: 0),
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScanResult &&
+          runtimeType == other.runtimeType &&
+          data == other.data &&
+          format == other.format &&
+          boundingBox == other.boundingBox;
+
+  @override
+  int get hashCode => Object.hash(data, format, boundingBox);
 }

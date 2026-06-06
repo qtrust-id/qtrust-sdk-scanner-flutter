@@ -6,7 +6,7 @@ import { bridgeResult, bridgeError, bridgeClose, bridgeReady } from "./modules/b
 import { openCamera, toggleFlash, applyZoom, stopCamera } from "./modules/camera.js";
 import { tryStartCapture, stopCapture } from "./modules/capture.js";
 import { setDecodeCallbacks, ensureDecoder } from "./modules/decode.js";
-import { initEmbed } from "./modules/embed.js";
+import { initEmbed, teardownEmbed } from "./modules/embed.js";
 import {
     showScanner, showHome, showResultOnHome,
     showFlash, showTutorial, applyViewfinderMode,
@@ -65,6 +65,10 @@ function startScannerFlow() {
 
     // Camera — marks cameraReady on success
     openCamera().then(function () {
+        // RACE: stop() may have fired while getUserMedia was in flight.
+        // camera.js already releases the stream in that case; mirror the guard
+        // here so we don't flip cameraReady=true and drive a dead capture loop.
+        if (!state.scanActive) return;
         dbg("camera open OK");
         state.cameraReady = true;
         tryStartCapture();
@@ -150,17 +154,26 @@ var btnFlashEl = document.getElementById("btn-flash");
 var btnZoomIn = document.getElementById("btn-zoom-in");
 var btnZoomOut = document.getElementById("btn-zoom-out");
 
-btnBack.addEventListener("click", function () {
-    if (state.isSDKMode) {
-        bridgeClose();
-    } else {
-        showHome();
-    }
-});
+// Null-guard each button — SDK-only builds may omit some controls from the HTML.
+if (btnBack) {
+    btnBack.addEventListener("click", function () {
+        if (state.isSDKMode) {
+            bridgeClose();
+        } else {
+            showHome();
+        }
+    });
+}
 
-btnFlashEl.addEventListener("click", toggleFlash);
-btnZoomIn.addEventListener("click", function () { applyZoom(state.currentZoom + state.zoomStep); });
-btnZoomOut.addEventListener("click", function () { applyZoom(state.currentZoom - state.zoomStep); });
+if (btnFlashEl) {
+    btnFlashEl.addEventListener("click", toggleFlash);
+}
+if (btnZoomIn) {
+    btnZoomIn.addEventListener("click", function () { applyZoom(state.currentZoom + state.zoomStep); });
+}
+if (btnZoomOut) {
+    btnZoomOut.addEventListener("click", function () { applyZoom(state.currentZoom - state.zoomStep); });
+}
 
 // ── Native bridge API ──────────────────────────────────
 /**
@@ -190,7 +203,9 @@ window.ScannerInit = function (opts) {
         if (typeof c.locale === "number") state.config.locale = c.locale;
         if (typeof c.skipTutorial === "boolean") state.config.skipTutorial = c.skipTutorial;
         if (typeof c.formats === "string") state.config.formats = c.formats;
-        dbg("ScannerInit: config=" + JSON.stringify(state.config));
+        // Redact vendorId from debug output — it is a vendor credential.
+        var dbgCfg = Object.assign({}, state.config, { vendorId: state.config.vendorId ? "[set]" : "" });
+        dbg("ScannerInit: config=" + JSON.stringify(dbgCfg));
     }
 
     // Start scanner flow based on config
@@ -243,4 +258,5 @@ initEmbed(function onStop() {
     stopCapture();
     stopCamera();
     state.scanActive = false;  // allow a subsequent sdk_init to start fresh
+    teardownEmbed();           // remove the message listener to prevent leaks
 });

@@ -3,9 +3,6 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - example/build/**
-  errors:
-    # Vendored web assets are not Dart — nothing to analyze there.
-    invalid_use_of_internal_member: warning
 
 linter:
   rules:

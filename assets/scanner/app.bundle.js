@@ -32,11 +32,11 @@
   var state = {
     scanType: parseScanType(bootParam("type")),
     mode: bootParam("mode") || "home",
-    isSDKMode: false,
     // Embed (web SDK) — loaded inside an iframe with ?embed=1. The web SDK
     // drives this page via postMessage instead of injected JS. See embed.js
     // and sdk-web/PROTOCOL.md.
-    isEmbed: false,
+    // Folded into the literal so all initial values are visible in one place.
+    isEmbed: bootParam("embed") === "1",
     parentOrigin: "",
     // locked origin of the embedding parent page
     // Vendor config — set via ScannerInit({ config }) or ScannerUpdateConfig()
@@ -78,20 +78,27 @@
     // the camera, or the second getUserMedia aborts the first video.play().
     scanActive: false
   };
-  state.isEmbed = bootParam("embed") === "1";
   state.isSDKMode = state.mode === "sdk" || state.isEmbed;
 
   // modules/debug.js
   var debugEl = document.getElementById("debug");
+  var DBG_MAX_LINES = 200;
   function dbg(msg) {
     var line = (/* @__PURE__ */ new Date()).toLocaleTimeString() + " " + msg;
     if (debugEl) {
-      debugEl.textContent += line + "\n";
+      var current = debugEl.textContent;
+      var lines = current ? current.split("\n") : [];
+      lines.push(line);
+      if (lines.length > DBG_MAX_LINES) {
+        lines = lines.slice(lines.length - DBG_MAX_LINES);
+      }
+      debugEl.textContent = lines.join("\n") + "\n";
       debugEl.scrollTop = debugEl.scrollHeight;
     }
   }
 
   // modules/embed.js
+  var _activeMessageListener = null;
   var EmbedMsg = {
     // parent → iframe
     SDK_INIT: "qtrust:sdk_init",
@@ -110,19 +117,45 @@
     }
     return "";
   }
+  function teardownEmbed() {
+    if (_activeMessageListener) {
+      window.removeEventListener("message", _activeMessageListener);
+      _activeMessageListener = null;
+      dbg("embed: message listener removed");
+    }
+  }
   function initEmbed(onStop2) {
     if (!state.isEmbed) return;
-    state.parentOrigin = referrerOrigin();
-    window.addEventListener("message", function(event) {
+    teardownEmbed();
+    if (typeof window !== "undefined" && window.__SCANNER_BOOT__) {
+      _activeMessageListener = function(event) {
+        var msg = event.data;
+        if (!msg || typeof msg.type !== "string") return;
+        if (msg.type === EmbedMsg.SDK_STOP) {
+          dbg("embed(native): sdk_stop");
+          if (typeof onStop2 === "function") onStop2();
+        }
+      };
+      window.addEventListener("message", _activeMessageListener);
+      dbg("embed(native): __SCANNER_BOOT__ present \u2014 sdk_init via postMessage disabled");
+      return;
+    }
+    var boot2 = typeof window !== "undefined" && window.__SCANNER_BOOT__ || {};
+    var expectedOrigin = boot2.expectedOrigin || referrerOrigin();
+    state.parentOrigin = expectedOrigin;
+    _activeMessageListener = function(event) {
       if (state.parentOrigin && event.origin !== state.parentOrigin) {
-        dbg("embed: drop msg from " + event.origin);
+        dbg("embed: drop msg from " + event.origin + " (expected " + state.parentOrigin + ")");
         return;
       }
       var msg = event.data;
       if (!msg || typeof msg.type !== "string") return;
       switch (msg.type) {
         case EmbedMsg.SDK_INIT:
-          if (!state.parentOrigin) state.parentOrigin = event.origin;
+          if (!state.parentOrigin) {
+            dbg("embed: sdk_init rejected \u2014 parentOrigin unknown, cannot establish trust");
+            return;
+          }
           dbg("embed: sdk_init from " + event.origin);
           if (typeof window.ScannerInit === "function") {
             window.ScannerInit(msg.payload || {});
@@ -135,12 +168,18 @@
         default:
           break;
       }
-    });
+    };
+    window.addEventListener("message", _activeMessageListener);
     emitEmbed(EmbedMsg.SDK_READY, {});
     dbg("embed: sdk_ready -> " + (state.parentOrigin || "(no referrer)"));
   }
   function emitEmbed(type, payload) {
     if (!state.isEmbed || !window.parent || window.parent === window) return;
+    var isDataMsg = type === EmbedMsg.RESULT || type === EmbedMsg.ERROR || type === EmbedMsg.CLOSE;
+    if (isDataMsg && !state.parentOrigin) {
+      dbg("embed: drop " + type + " \u2014 parentOrigin unknown, refusing wildcard postMessage");
+      return;
+    }
     var target = state.parentOrigin || "*";
     window.parent.postMessage({ type, payload: payload === void 0 ? {} : payload }, target);
   }
@@ -2457,10 +2496,23 @@
       return Promise.reject(new Error("getUserMedia not supported"));
     }
     dbg("calling getUserMedia...");
-    return navigator.mediaDevices.getUserMedia({
-      video: { facingMode: FACING_MODE, width: { ideal: 1280 }, height: { ideal: 720 } },
+    var constraints = {
+      video: { facingMode: { ideal: FACING_MODE }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false
-    }).then(function(s2) {
+    };
+    function doGetUserMedia(c2) {
+      return navigator.mediaDevices.getUserMedia(c2).catch(function(err) {
+        if ((err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError") && c2.video && c2.video.facingMode) {
+          dbg("facingMode constraint rejected (" + err.name + "), retrying without it");
+          return navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+        }
+        throw err;
+      });
+    }
+    return doGetUserMedia(constraints).then(function(s2) {
       dbg("got stream, tracks=" + s2.getTracks().length);
       state.stream = s2;
       video2.srcObject = state.stream;
@@ -2494,10 +2546,22 @@
         status.textContent = "Scanning...";
       });
     }).then(function() {
+      if (!state.scanActive) {
+        dbg("camera open resolved after stop \u2014 releasing stream");
+        if (state.stream) {
+          state.stream.getTracks().forEach(function(t2) {
+            t2.stop();
+          });
+          state.stream = null;
+        }
+        video2.pause();
+        video2.srcObject = null;
+        return;
+      }
       initZoomCapabilities();
     }).catch(function(err) {
       dbg("ERROR getUserMedia: " + err.name + " - " + err.message);
-      status.textContent = "Camera: " + err.message;
+      status.textContent = "Kamera tidak dapat dibuka";
       throw err;
     });
   }
@@ -2555,18 +2619,20 @@
       });
       state.stream = null;
     }
+    video2.pause();
     video2.classList.remove("playing");
     video2.srcObject = null;
   }
   function toggleFlash() {
     if (!state.stream) return;
     var track = state.stream.getVideoTracks()[0];
+    if (!track) return;
     state.flashOn = !state.flashOn;
     track.applyConstraints({ advanced: [{ torch: state.flashOn }] }).then(function() {
-      btnFlash.classList.toggle("active", state.flashOn);
+      if (btnFlash) btnFlash.classList.toggle("active", state.flashOn);
     }).catch(function() {
       state.flashOn = false;
-      btnFlash.classList.remove("active");
+      if (btnFlash) btnFlash.classList.remove("active");
     });
   }
 
@@ -2609,7 +2675,12 @@
     if (resultDataEl) resultDataEl.textContent = data.data || "";
     if (resultFormatEl) resultFormatEl.textContent = data.format || "";
   }
+  var _resultScreenBound = false;
+  var _tutorialScreenBound = false;
+  var _homeScreenBound = false;
   function initResultScreen(onScanAgain, onReport) {
+    if (_resultScreenBound) return;
+    _resultScreenBound = true;
     var btnScanAgain = document.getElementById("btn-scan-again");
     var btnReport = document.getElementById("btn-result-report");
     if (btnScanAgain) {
@@ -2645,6 +2716,8 @@
     }
   }
   function initTutorialScreen(onStartScan, onBack) {
+    if (_tutorialScreenBound) return;
+    _tutorialScreenBound = true;
     var btnStart = document.getElementById("btn-tutorial-start");
     var btnBack2 = document.getElementById("btn-tutorial-back");
     if (btnStart) {
@@ -2655,6 +2728,8 @@
     }
   }
   function initHomeScreen(onStartScan) {
+    if (_homeScreenBound) return;
+    _homeScreenBound = true;
     var scanTypeBtns = document.querySelectorAll(".scan-type-btn");
     var btnStartScan = document.getElementById("btn-start-scan");
     var toggleSkipTutorial = document.getElementById("toggle-skip-tutorial");
@@ -2671,11 +2746,13 @@
         btn.classList.remove("active");
       }
       btn.addEventListener("click", function() {
+        var parsed = parseInt(btn.getAttribute("data-type"), 10);
+        if (parsed !== ScanType.QR && parsed !== ScanType.BARCODE) return;
         scanTypeBtns.forEach(function(b2) {
           b2.classList.remove("active");
         });
         btn.classList.add("active");
-        state.scanType = parseInt(btn.getAttribute("data-type"), 10);
+        state.scanType = parsed;
       });
     });
     if (btnStartScan) {
@@ -2715,6 +2792,7 @@
     state.fps = state.scanType === ScanType.BARCODE ? 10 : 5;
     applyViewfinderMode();
     openCamera().then(function() {
+      if (!state.scanActive) return;
       dbg("camera open OK");
       state.cameraReady = true;
       tryStartCapture();
@@ -2787,20 +2865,28 @@
   var btnFlashEl = document.getElementById("btn-flash");
   var btnZoomIn = document.getElementById("btn-zoom-in");
   var btnZoomOut = document.getElementById("btn-zoom-out");
-  btnBack.addEventListener("click", function() {
-    if (state.isSDKMode) {
-      bridgeClose();
-    } else {
-      showHome();
-    }
-  });
-  btnFlashEl.addEventListener("click", toggleFlash);
-  btnZoomIn.addEventListener("click", function() {
-    applyZoom(state.currentZoom + state.zoomStep);
-  });
-  btnZoomOut.addEventListener("click", function() {
-    applyZoom(state.currentZoom - state.zoomStep);
-  });
+  if (btnBack) {
+    btnBack.addEventListener("click", function() {
+      if (state.isSDKMode) {
+        bridgeClose();
+      } else {
+        showHome();
+      }
+    });
+  }
+  if (btnFlashEl) {
+    btnFlashEl.addEventListener("click", toggleFlash);
+  }
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener("click", function() {
+      applyZoom(state.currentZoom + state.zoomStep);
+    });
+  }
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener("click", function() {
+      applyZoom(state.currentZoom - state.zoomStep);
+    });
+  }
   window.ScannerInit = function(opts) {
     dbg("ScannerInit: type=" + opts.type);
     if (typeof opts.type === "number") {
@@ -2814,7 +2900,8 @@
       if (typeof c2.locale === "number") state.config.locale = c2.locale;
       if (typeof c2.skipTutorial === "boolean") state.config.skipTutorial = c2.skipTutorial;
       if (typeof c2.formats === "string") state.config.formats = c2.formats;
-      dbg("ScannerInit: config=" + JSON.stringify(state.config));
+      var dbgCfg = Object.assign({}, state.config, { vendorId: state.config.vendorId ? "[set]" : "" });
+      dbg("ScannerInit: config=" + JSON.stringify(dbgCfg));
     }
     if (state.isSDKMode) {
       if (state.config.skipTutorial) {
@@ -2847,5 +2934,6 @@
     stopCapture();
     stopCamera();
     state.scanActive = false;
+    teardownEmbed();
   });
 })();

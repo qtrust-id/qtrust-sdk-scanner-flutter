@@ -48,12 +48,21 @@ export function showResultOnHome(data) {
     if (resultFormatEl) resultFormatEl.textContent = data.format || "";
 }
 
+// Idempotency flags — each init function must bind at most once.
+var _resultScreenBound = false;
+var _tutorialScreenBound = false;
+var _homeScreenBound = false;
+
 /**
  * Initialize result screen event listeners.
+ * Idempotent — safe to call multiple times; listeners are bound only once.
  * @param {Function} onScanAgain — called when user taps "Scan Lagi"
  * @param {Function} onReport — called when user taps "Lapor"
  */
 export function initResultScreen(onScanAgain, onReport) {
+    if (_resultScreenBound) return;
+    _resultScreenBound = true;
+
     var btnScanAgain = document.getElementById("btn-scan-again");
     var btnReport = document.getElementById("btn-result-report");
 
@@ -95,10 +104,14 @@ export function applyViewfinderMode() {
 
 /**
  * Initialize tutorial screen event listeners.
+ * Idempotent — safe to call multiple times; listeners are bound only once.
  * @param {Function} onStartScan — called when user taps "Mulai Scan"
  * @param {Function} onBack — called when user taps back arrow
  */
 export function initTutorialScreen(onStartScan, onBack) {
+    if (_tutorialScreenBound) return;
+    _tutorialScreenBound = true;
+
     var btnStart = document.getElementById("btn-tutorial-start");
     var btnBack = document.getElementById("btn-tutorial-back");
 
@@ -112,9 +125,13 @@ export function initTutorialScreen(onStartScan, onBack) {
 
 /**
  * Initialize home screen event listeners.
+ * Idempotent — safe to call multiple times; listeners are bound only once.
  * @param {Function} onStartScan — called when user taps "Start Scanning"
  */
 export function initHomeScreen(onStartScan) {
+    if (_homeScreenBound) return;
+    _homeScreenBound = true;
+
     var scanTypeBtns = document.querySelectorAll(".scan-type-btn");
     var btnStartScan = document.getElementById("btn-start-scan");
     var toggleSkipTutorial = document.getElementById("toggle-skip-tutorial");
@@ -135,9 +152,12 @@ export function initHomeScreen(onStartScan) {
         }
 
         btn.addEventListener("click", function () {
+            var parsed = parseInt(btn.getAttribute("data-type"), 10);
+            // Validate parsed value against known ScanType set — ignore NaN or unknown.
+            if (parsed !== ScanType.QR && parsed !== ScanType.BARCODE) return;
             scanTypeBtns.forEach(function (b) { b.classList.remove("active"); });
             btn.classList.add("active");
-            state.scanType = parseInt(btn.getAttribute("data-type"), 10);
+            state.scanType = parsed;
         });
     });
 

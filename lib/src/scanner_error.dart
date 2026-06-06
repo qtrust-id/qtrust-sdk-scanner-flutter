@@ -37,5 +37,16 @@ class ScannerError implements Exception {
   final String message;
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScannerError &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          message == other.message;
+
+  @override
+  int get hashCode => Object.hash(kind, message);
+
+  @override
   String toString() => 'ScannerError(${kind.name}): $message';
 }

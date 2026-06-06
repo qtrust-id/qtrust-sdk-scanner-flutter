@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -84,40 +85,96 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
     shared: true,
   );
 
-  final ScannerBridge _bridge = ScannerBridge();
+  /// Reference count across all live [_QtrustScannerViewState] instances.
+  /// The server is started when the count goes 1→ running and stopped when
+  /// it drops back to 0, preventing both double-starts and leaks.
+  static int _serverRefCount = 0;
+
+  late final ScannerBridge _bridge;
+  late final UnmodifiableListView<UserScript> _userScripts;
   Future<WebUri>? _bootstrap;
   InAppWebViewController? _controller;
   bool _ready = false;
   bool _revealing = false;
+  bool _hasResult = false;
+
+  /// Fires [ScannerError.timeout] if no result is received within
+  /// [ScannerConfig.timeout]. Cancelled on first result or on dispose.
+  Timer? _timeoutTimer;
 
   @override
   void initState() {
     super.initState();
-    _bridge
-      ..onResult = widget.onResult
-      ..onError = widget.onError
-      ..onReady = _handleReady
-      ..onClose = widget.onClose;
+    _userScripts = UnmodifiableListView<UserScript>([
+      UserScript(
+        source: bootShimJs(widget.type),
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      ),
+      UserScript(
+        source: bridgeShimJs,
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      ),
+      UserScript(
+        source: _blackBgJs,
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      ),
+    ]);
+    _bridge = ScannerBridge(
+      onResult: _handleResult,
+      onError: widget.onError,
+      onReady: _handleReady,
+      onClose: widget.onClose,
+    );
     _bootstrap = _start();
 
     // Fallback reveal — never leave the user staring at a spinner forever.
     Future<void>.delayed(QtrustScannerView._loadingTimeout, () {
       if (mounted && !_ready) setState(() => _ready = true);
     });
+
+    // config.timeout: emit a timeout error if no result arrives in time.
+    _timeoutTimer = Timer(widget.config.timeout, () {
+      if (!mounted || _hasResult) return;
+      _timeoutTimer = null;
+      widget.onError?.call(
+        const ScannerError.timeout(
+          'No scan result received within the configured timeout.',
+        ),
+      );
+      if (mounted && !_ready) setState(() => _ready = true);
+    });
+  }
+
+  void _handleResult(ScanResult result) {
+    _hasResult = true;
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+    widget.onResult(result);
   }
 
   Future<WebUri> _start() async {
-    if (!_server.isRunning()) {
-      await _server.start();
+    try {
+      _serverRefCount++;
+      if (!_server.isRunning()) {
+        await _server.start();
+      }
+      final url = 'http://localhost:${QtrustScannerView._serverPort}/index.html'
+          '?type=${widget.type.value}&mode=sdk&skip_tutorial=1';
+      return WebUri(url);
+    } on Exception catch (e) {
+      if (mounted) {
+        widget.onError?.call(
+          ScannerError.connectionFailed('Scanner server failed to start: $e'),
+        );
+        setState(() => _ready = true);
+      }
+      rethrow;
     }
-    final url = 'http://localhost:${QtrustScannerView._serverPort}/index.html'
-        '?type=${widget.type.value}&mode=sdk&skip_tutorial=1';
-    return WebUri(url);
   }
 
   void _handleReady() {
-    widget.onReady?.call();
     if (!mounted || _revealing) return;
+    widget.onReady?.call();
     _revealing = true;
     Future<void>.delayed(QtrustScannerView._revealDelay, () {
       if (mounted) setState(() => _ready = true);
@@ -126,30 +183,23 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
 
   @override
   void dispose() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
     _bridge.tearDown();
     // Navigate away to release the camera stream promptly. Without this, the
     // prior getUserMedia track can linger and stall the next scan session
     // (black screen + slow start on re-entry).
     _controller?.stopLoading();
     _controller?.loadUrl(urlRequest: URLRequest(url: WebUri('about:blank')));
+    _serverRefCount--;
+    if (_serverRefCount <= 0) {
+      _serverRefCount = 0;
+      if (_server.isRunning()) {
+        unawaited(_server.close());
+      }
+    }
     super.dispose();
   }
-
-  UnmodifiableListView<UserScript> get _userScripts =>
-      UnmodifiableListView<UserScript>([
-        UserScript(
-          source: bootShimJs(widget.type.value),
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-        ),
-        UserScript(
-          source: bridgeShimJs,
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-        ),
-        UserScript(
-          source: _blackBgJs,
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-        ),
-      ]);
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +262,20 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
           action: PermissionResponseAction.GRANT,
         );
       },
-      onLoadStop: (controller, _) async {
-        await controller.evaluateJavascript(source: _buildInitJs());
+      onLoadStop: (controller, url) async {
+        // Only call ScannerInit on the expected scanner origin. Navigating to
+        // about:blank (on dispose) or any error page would produce a silent
+        // JS TypeError because window.ScannerInit is not defined there.
+        final host = url?.host ?? '';
+        final port = url?.port ?? 0;
+        if (host != 'localhost' || port != QtrustScannerView._serverPort) {
+          return;
+        }
+        final js = _buildInitJs();
+        await controller.evaluateJavascript(source: js);
+        // Re-check mounted after the async gap — the widget may have been
+        // disposed while the JS evaluation was in flight.
+        if (!mounted) return;
       },
       onReceivedError: (controller, request, error) {
         if (request.isForMainFrame != true) return;

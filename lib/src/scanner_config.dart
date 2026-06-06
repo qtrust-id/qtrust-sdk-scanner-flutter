@@ -70,6 +70,26 @@ class VendorConfig {
         'locale': locale.value,
         'skipTutorial': skipTutorial,
       };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VendorConfig &&
+          runtimeType == other.runtimeType &&
+          vendorId == other.vendorId &&
+          textHintScan == other.textHintScan &&
+          theme == other.theme &&
+          locale == other.locale &&
+          skipTutorial == other.skipTutorial;
+
+  @override
+  int get hashCode => Object.hash(
+        vendorId,
+        textHintScan,
+        theme,
+        locale,
+        skipTutorial,
+      );
 }
 
 /// Configuration for a [Scanner] instance.
@@ -99,4 +119,15 @@ class ScannerConfig {
   }
 
   static const Duration defaultTimeout = Duration(seconds: 30);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScannerConfig &&
+          runtimeType == other.runtimeType &&
+          timeout == other.timeout &&
+          vendorConfig == other.vendorConfig;
+
+  @override
+  int get hashCode => Object.hash(timeout, vendorConfig);
 }

@@ -45,12 +45,12 @@ function parseScanType(raw) {
 export var state = {
     scanType: parseScanType(bootParam("type")),
     mode: bootParam("mode") || "home",
-    isSDKMode: false,
 
     // Embed (web SDK) — loaded inside an iframe with ?embed=1. The web SDK
     // drives this page via postMessage instead of injected JS. See embed.js
     // and sdk-web/PROTOCOL.md.
-    isEmbed: false,
+    // Folded into the literal so all initial values are visible in one place.
+    isEmbed: bootParam("embed") === "1",
     parentOrigin: "",  // locked origin of the embedding parent page
 
     // Vendor config — set via ScannerInit({ config }) or ScannerUpdateConfig()
@@ -100,5 +100,6 @@ export var state = {
 
 // Embedded web SDK runs as a headless scanner surface — the consumer page is
 // the host (their own "home"), exactly like native: embed implies SDK mode.
-state.isEmbed = bootParam("embed") === "1";
+// isEmbed is already initialised above (folded into the literal).
+// isSDKMode depends on isEmbed, so it must be derived after the object exists.
 state.isSDKMode = state.mode === "sdk" || state.isEmbed;

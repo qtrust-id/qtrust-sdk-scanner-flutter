@@ -24,10 +24,31 @@ export function openCamera() {
     }
 
     dbg("calling getUserMedia...");
-    return navigator.mediaDevices.getUserMedia({
-        video: { facingMode: FACING_MODE, width: { ideal: 1280 }, height: { ideal: 720 } },
+    // Use ideal (soft) facingMode so devices that only have a single camera do
+    // not trigger an OverconstrainedError. Falls back to any available camera
+    // on OverconstrainedError for maximum device compatibility.
+    var constraints = {
+        video: { facingMode: { ideal: FACING_MODE }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
-    }).then(function (s) {
+    };
+
+    function doGetUserMedia(c) {
+        return navigator.mediaDevices.getUserMedia(c).catch(function (err) {
+            // OverconstrainedError: the ideal hint already should not throw, but
+            // some older WebView builds still reject — retry without facingMode.
+            if ((err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError") &&
+                c.video && c.video.facingMode) {
+                dbg("facingMode constraint rejected (" + err.name + "), retrying without it");
+                return navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+            }
+            throw err;
+        });
+    }
+
+    return doGetUserMedia(constraints).then(function (s) {
         dbg("got stream, tracks=" + s.getTracks().length);
         state.stream = s;
         video.srcObject = state.stream;
@@ -66,10 +87,23 @@ export function openCamera() {
             status.textContent = "Scanning...";
         });
     }).then(function () {
+        // SECURITY/RACE: stop() may have fired while getUserMedia was resolving.
+        // If so, tear down the stream we just obtained instead of starting capture.
+        if (!state.scanActive) {
+            dbg("camera open resolved after stop — releasing stream");
+            if (state.stream) {
+                state.stream.getTracks().forEach(function (t) { t.stop(); });
+                state.stream = null;
+            }
+            video.pause();
+            video.srcObject = null;
+            return;
+        }
         initZoomCapabilities();
     }).catch(function (err) {
+        // Route raw device error only to debug — never expose to UI.
         dbg("ERROR getUserMedia: " + err.name + " - " + err.message);
-        status.textContent = "Camera: " + err.message;
+        status.textContent = "Kamera tidak dapat dibuka";
         throw err;
     });
 }
@@ -125,6 +159,9 @@ export function stopCamera() {
         state.stream.getTracks().forEach(function (t) { t.stop(); });
         state.stream = null;
     }
+    // Pause before clearing srcObject — avoids AbortError on some WebViews that
+    // reject the implicit pause triggered by srcObject=null while playing.
+    video.pause();
     // Re-hide so a fresh start doesn't flash the paused-video play overlay.
     video.classList.remove("playing");
     video.srcObject = null;
@@ -133,11 +170,13 @@ export function stopCamera() {
 export function toggleFlash() {
     if (!state.stream) return;
     var track = state.stream.getVideoTracks()[0];
+    // Guard: getVideoTracks() may return an empty array (e.g. after stream ends).
+    if (!track) return;
     state.flashOn = !state.flashOn;
     track.applyConstraints({ advanced: [{ torch: state.flashOn }] }).then(function () {
-        btnFlash.classList.toggle("active", state.flashOn);
+        if (btnFlash) btnFlash.classList.toggle("active", state.flashOn);
     }).catch(function () {
         state.flashOn = false;
-        btnFlash.classList.remove("active");
+        if (btnFlash) btnFlash.classList.remove("active");
     });
 }
