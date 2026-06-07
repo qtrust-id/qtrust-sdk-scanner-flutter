@@ -11,6 +11,9 @@ enum ScannerErrorKind {
 
   /// Server returned an error.
   serverError,
+
+  /// The user dismissed the scanner before a result was produced.
+  cancelled,
 }
 
 /// Error raised during a scan session.
@@ -32,6 +35,10 @@ class ScannerError implements Exception {
 
   const ScannerError.serverError(String message)
       : this(ScannerErrorKind.serverError, message);
+
+  const ScannerError.cancelled([
+    String message = 'Scanner was cancelled by the user.',
+  ]) : this(ScannerErrorKind.cancelled, message);
 
   final ScannerErrorKind kind;
   final String message;

@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panduan Integrasi — QTrust Scanner SDK (Flutter)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Arial', 'Helvetica Neue', sans-serif;
+      color: #1e293b;
+      background: #fff;
+      line-height: 1.8;
+      font-size: 11pt;
+      max-width: 816px;
+      margin: 0 auto;
+      padding: 40px 60px;
+    }
+
+    /* --- Cover Page --- */
+    .cover {
+      text-align: center;
+      padding: 80px 0 60px;
+      border-bottom: 3px solid #388fa3;
+      margin-bottom: 40px;
+      page-break-after: always;
+    }
+    .cover .logo-text {
+      font-size: 12pt;
+      color: #64748b;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+    .cover h1 {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #388fa3;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+    .cover .doc-type {
+      font-size: 14pt;
+      color: #64748b;
+      font-weight: 400;
+      margin-bottom: 40px;
+    }
+    .cover .version-tag {
+      display: inline-block;
+      background: #388fa3;
+      color: #fff;
+      padding: 6px 20px;
+      border-radius: 4px;
+      font-size: 10pt;
+      font-weight: 600;
+      margin-bottom: 40px;
+    }
+
+    /* --- Document Control Table --- */
+    .doc-control {
+      margin: 0 auto;
+      max-width: 500px;
+      text-align: left;
+    }
+    .doc-control table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+    }
+    .doc-control td {
+      padding: 6px 12px;
+      border: 1px solid #e2e8f0;
+    }
+    .doc-control td:first-child {
+      font-weight: 600;
+      color: #64748b;
+      width: 160px;
+      background: #f8fafc;
+    }
+
+    /* --- Section headings --- */
+    h2 {
+      font-size: 16pt;
+      font-weight: 700;
+      color: #388fa3;
+      margin: 36px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #d1ecf1;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 13pt;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 24px 0 8px;
+    }
+    h4 {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #2c7a8a;
+      margin: 16px 0 6px;
+    }
+    p { margin-bottom: 12px; }
+    ul, ol { margin: 0 0 14px 24px; }
+    li { margin-bottom: 4px; }
+
+    /* --- Tables --- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 10pt;
+    }
+    thead th {
+      background: #388fa3;
+      color: #fff;
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+    tbody td {
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* --- Code --- */
+    code {
+      background: #f1f5f9;
+      color: #2c7a8a;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9pt;
+      font-family: 'Courier New', monospace;
+    }
+    pre {
+      background: #f1f5f9;
+      padding: 16px;
+      border-radius: 6px;
+      font-size: 9pt;
+      font-family: 'Courier New', monospace;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+      line-height: 1.5;
+      white-space: pre;
+    }
+    /* highlight.js — keep doc's pre background, color tokens only */
+    pre code.hljs {
+      background: transparent;
+      padding: 0;
+      font-size: 9pt;
+      font-family: 'Courier New', monospace;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* --- Callout boxes --- */
+    .callout {
+      border-left: 4px solid #3b82f6;
+      background: #eff6ff;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 10pt;
+    }
+    .callout-success {
+      border-left-color: #10b981;
+      background: #ecfdf5;
+    }
+    .callout-warn {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+    .callout-danger {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+    }
+    .callout strong { display: block; margin-bottom: 4px; }
+
+    /* --- Badge --- */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+    .badge-stable { background: #d1fae5; color: #065f46; }
+    .badge-beta { background: #fde68a; color: #92400e; }
+    .badge-req { background: #fee2e2; color: #991b1b; }
+    .badge-opt { background: #fef3c7; color: #92400e; }
+
+    /* --- TOC --- */
+    .toc { list-style: none; margin: 0; padding: 0; }
+    .toc li { padding: 4px 0; border-bottom: 1px dotted #e2e8f0; }
+    .toc a { color: #388fa3; text-decoration: none; font-size: 10pt; }
+    .toc a:hover { text-decoration: underline; }
+    .toc .num { color: #64748b; font-weight: 600; display: inline-block; width: 32px; }
+
+    /* --- Print --- */
+    @media print {
+      body { padding: 20px 40px; }
+      .cover { page-break-after: always; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- COVER PAGE                                                    -->
+<!-- ============================================================ -->
+<div class="cover">
+  <div class="logo-text">QTrust Scanner</div>
+  <h1>QTrust Scanner SDK<br>Panduan Integrasi Flutter</h1>
+  <div class="doc-type">Developer Integration Guide</div>
+  <span class="version-tag">SDK v1.0.3 — STABLE</span>
+
+  <div class="doc-control">
+    <table>
+      <tr><td>Package</td><td>qtrust_scanner (pub.dev)</td></tr>
+      <tr><td>Registry</td><td>pub.dev (public)</td></tr>
+      <tr><td>License</td><td>Apache-2.0</td></tr>
+      <tr><td>Repository</td><td>github.com/qtrust-id/qtrust-sdk-scanner-flutter</td></tr>
+      <tr><td>Platform</td><td>Flutter ≥ 3.22, Dart ≥ 3.4 (iOS &amp; Android)</td></tr>
+      <tr><td>Status</td><td><span class="badge badge-stable">STABLE</span></td></tr>
+      <tr><td>Tanggal</td><td>4 Juni 2026</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- DAFTAR ISI                                                    -->
+<!-- ============================================================ -->
+<h2>Daftar Isi</h2>
+<ul class="toc">
+  <li><a href="#s1"><span class="num">1</span> Ringkasan</a></li>
+  <li><a href="#s2"><span class="num">2</span> Prasyarat</a></li>
+  <li><a href="#s3"><span class="num">3</span> Instalasi (pub.dev)</a></li>
+  <li><a href="#s4"><span class="num">4</span> Setup Platform (iOS &amp; Android)</a></li>
+  <li><a href="#s5"><span class="num">5</span> Import &amp; Pakai Widget</a></li>
+  <li><a href="#s6"><span class="num">6</span> Konfigurasi (ScannerConfig)</a></li>
+  <li><a href="#s7"><span class="num">7</span> Tipe Scan (ScanType)</a></li>
+  <li><a href="#s8"><span class="num">8</span> Callback &amp; Event</a></li>
+  <li><a href="#s9"><span class="num">9</span> Membaca Hasil (ScanResult)</a></li>
+  <li><a href="#s10"><span class="num">10</span> Lifecycle &amp; Cleanup</a></li>
+  <li><a href="#s11"><span class="num">11</span> Contoh Lengkap</a></li>
+  <li><a href="#s12"><span class="num">12</span> Referensi API</a></li>
+  <li><a href="#s13"><span class="num">13</span> Keamanan</a></li>
+  <li><a href="#s14"><span class="num">14</span> Troubleshooting</a></li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- 1. RINGKASAN                                                  -->
+<!-- ============================================================ -->
+<h2 id="s1">1. Ringkasan</h2>
+<p>
+  QTrust Scanner Flutter SDK = on-device QR &amp; Barcode scanner untuk Flutter (iOS &amp; Android).
+  Engine scan berjalan di dalam <strong>WebView</strong> yang memuat UI scanner — SDK
+  <strong>membundel UI web secara lokal</strong> dan menyajikannya lewat localhost secure origin.
+  Seluruh decode dilakukan <strong>on-device</strong> (zxing-wasm); tidak ada koneksi server
+  yang dibutuhkan.
+</p>
+<p>
+  Pemakaian inti = satu widget: <code>QtrustScannerView</code>. Pasang di widget tree, beri
+  <code>ScannerConfig</code>, dan terima <code>ScanResult</code> lewat callback <code>onResult</code>.
+  Widget memiliki lifecycle kamera sendiri — kamera dilepas otomatis saat widget <code>dispose</code>.
+</p>
+<table>
+  <thead><tr><th>Fitur</th><th>Keterangan</th></tr></thead>
+  <tbody>
+    <tr><td>Tipe scan</td><td>QR Code (2D), Barcode (1D)</td></tr>
+    <tr><td>Surface</td><td><code>QtrustScannerView</code> — Flutter widget berisi WebView, mengisi container</td></tr>
+    <tr><td>Backend</td><td>On-device decoder (zxing-wasm) — tidak ada server</td></tr>
+    <tr><td>API gaya callback</td><td><code>onResult</code>, <code>onError</code>, <code>onReady</code>, <code>onClose</code></td></tr>
+    <tr><td>Output</td><td><code>data</code> (String), <code>format</code>, <code>boundingBox</code></td></tr>
+    <tr><td>Distribusi</td><td>Paket public pub.dev, tanpa build step</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 2. PRASYARAT                                                  -->
+<!-- ============================================================ -->
+<h2 id="s2">2. Prasyarat</h2>
+<table>
+  <thead><tr><th>Item</th><th>Minimum</th></tr></thead>
+  <tbody>
+    <tr><td>Flutter</td><td><code>≥ 3.22.0</code></td></tr>
+    <tr><td>Dart SDK</td><td><code>≥ 3.4.0 &lt; 4.0.0</code></td></tr>
+    <tr><td>iOS</td><td>iOS 12+ (WKWebView, <code>getUserMedia</code>)</td></tr>
+    <tr><td>Android</td><td>minSdk 21+ (System WebView modern)</td></tr>
+    <tr><td>Izin kamera</td><td>iOS <code>NSCameraUsageDescription</code>; Android <code>CAMERA</code> + grant runtime</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warn">
+  <strong>Izin kamera wajib dipegang host</strong>
+  WebView SDK akan <em>auto-grant</em> request kamera di level WebView, tapi izin
+  <strong>OS</strong> tetap harus dipegang aplikasi host: deklarasi <code>NSCameraUsageDescription</code>
+  (iOS) dan permission <code>CAMERA</code> + grant runtime (Android). Lihat Bagian 4.
+</div>
+
+<!-- ============================================================ -->
+<!-- 3. INSTALASI                                                  -->
+<!-- ============================================================ -->
+<h2 id="s3">3. Instalasi (pub.dev)</h2>
+<p>
+  Paket dipublish <strong>public</strong> ke <code>pub.dev</code>. Tidak perlu token atau registry
+  khusus — tambahkan seperti dependency biasa.
+</p>
+
+<h4>3.1 Tambah paket</h4>
+<pre>flutter pub add qtrust_scanner</pre>
+<p>atau secara manual di <code>pubspec.yaml</code>:</p>
+<pre>dependencies:
+  qtrust_scanner: ^1.0.3</pre>
+<p>lalu:</p>
+<pre>flutter pub get</pre>
+
+<div class="callout">
+  <strong>Isi paket</strong>
+  Paket sudah membundel UI scanner web (<code>assets/scanner/</code>) sebagai package asset —
+  tidak ada langkah build atau download tambahan. Cukup <code>pub get</code>.
+</div>
+
+<h4>3.2 License</h4>
+<p>Dirilis di bawah <strong>Apache-2.0</strong> — bebas dipakai &amp; dimodifikasi dengan atribusi &amp; klausa paten standar.</p>
+
+<!-- ============================================================ -->
+<!-- 4. SETUP PLATFORM                                             -->
+<!-- ============================================================ -->
+<h2 id="s4">4. Setup Platform (iOS &amp; Android)</h2>
+<p>
+  Scanner butuh kamera. Karena UI berjalan di WebView via <code>getUserMedia</code>, host
+  <strong>wajib</strong> mendeklarasikan izin kamera OS, dan di Android juga meminta grant runtime
+  sebelum widget di-mount.
+</p>
+
+<h4>4.1 iOS — <code>ios/Runner/Info.plist</code></h4>
+<p>Tambahkan deskripsi penggunaan kamera (wajib, jika tidak app crash saat akses kamera):</p>
+<pre>&lt;key&gt;NSCameraUsageDescription&lt;/key&gt;
+&lt;string&gt;Aplikasi memerlukan akses kamera untuk memindai QR &amp; barcode.&lt;/string&gt;</pre>
+
+<h4>4.2 Android — <code>android/app/src/main/AndroidManifest.xml</code></h4>
+<pre>&lt;uses-permission android:name="android.permission.CAMERA" /&gt;</pre>
+
+<h4>4.3 Android — grant runtime sebelum mount</h4>
+<p>
+  Android 6+ butuh grant runtime. SDK tidak menarik dependency permission agar tetap ringan —
+  minta izin di host (mis. dengan paket <code>permission_handler</code>) sebelum menampilkan
+  <code>QtrustScannerView</code>:
+</p>
+<pre>import 'package:permission_handler/permission_handler.dart';
+
+Future&lt;bool&gt; ensureCamera() async {
+  final status = await Permission.camera.request();
+  return status.isGranted;
+}</pre>
+
+<div class="callout callout-warn">
+  <strong>Urutan benar</strong>
+  Pastikan izin kamera sudah <em>granted</em> sebelum <code>QtrustScannerView</code> mount.
+  Tanpa izin OS, kamera tampil hitam dan <code>onError</code> melaporkan kegagalan.
+</div>
+
+<!-- ============================================================ -->
+<!-- 5. IMPORT & PAKAI WIDGET                                      -->
+<!-- ============================================================ -->
+<h2 id="s5">5. Import &amp; Pakai Widget</h2>
+
+<h4>5.1 Import</h4>
+<pre>import 'package:qtrust_scanner/qtrust_scanner.dart';</pre>
+
+<h4>5.2 Tampilkan scanner</h4>
+<p>
+  <code>QtrustScannerView</code> mengisi penuh ruang yang diberikan. Letakkan di body
+  <code>Scaffold</code> (atau halaman penuh). Beri <code>config</code>, <code>type</code>, dan
+  callback hasil:
+</p>
+<pre>Scaffold(
+  backgroundColor: Colors.black,
+  body: QtrustScannerView(
+    config: ScannerConfig(
+      vendorConfig: VendorConfig(skipTutorial: true),
+    ),
+    type: ScanType.qr,
+    onResult: (result) {
+      debugPrint('${result.data} (${result.format})');
+    },
+    onError: (error) => debugPrint(error.message),
+  ),
+);</pre>
+
+<div class="callout callout-warn">
+  <strong>Beri ukuran pada container</strong>
+  Seperti WebView lain, widget butuh ukuran. Pakai di halaman penuh atau bungkus dengan
+  <code>SizedBox</code>/<code>Expanded</code> agar tidak 0-tinggi.
+</div>
+
+<!-- ============================================================ -->
+<!-- 6. KONFIGURASI                                                -->
+<!-- ============================================================ -->
+<h2 id="s6">6. Konfigurasi (ScannerConfig)</h2>
+
+<h4>6.1 ScannerConfig (root)</h4>
+<table>
+  <thead><tr><th>Parameter</th><th>Tipe</th><th>Default</th><th>Keterangan</th></tr></thead>
+  <tbody>
+    <tr><td><code>timeout</code></td><td>Duration</td><td><code>30 s</code></td><td>Batas tunggu hasil (untuk alur one-shot)</td></tr>
+    <tr><td><code>vendorConfig</code></td><td>VendorConfig</td><td><code>VendorConfig()</code></td><td>Konfigurasi tampilan (lihat 6.2)</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Tidak ada server URL</strong>
+  Decode dilakukan sepenuhnya on-device menggunakan zxing-wasm. Tidak ada konfigurasi endpoint
+  — cukup buat <code>ScannerConfig()</code> dan scanner siap dipakai.
+</div>
+
+<h4>6.2 VendorConfig (<code>vendorConfig</code>)</h4>
+<table>
+  <thead><tr><th>Parameter</th><th>Tipe</th><th>Default</th><th>Keterangan</th></tr></thead>
+  <tbody>
+    <tr><td><code>vendorId</code></td><td>String</td><td><code>""</code></td><td>Identitas vendor (opsional)</td></tr>
+    <tr><td><code>textHintScan</code></td><td>String</td><td><code>""</code></td><td>Teks hint di layar scan (kosong = default per tipe)</td></tr>
+    <tr><td><code>theme</code></td><td>ScannerTheme</td><td><code>ScannerTheme.dark</code></td><td><code>.dark</code> (0) / <code>.light</code> (1)</td></tr>
+    <tr><td><code>locale</code></td><td>ScannerLocale</td><td><code>ScannerLocale.id</code></td><td><code>.id</code> (0) / <code>.en</code> (1)</td></tr>
+    <tr><td><code>skipTutorial</code></td><td>bool</td><td><code>true</code></td><td><code>true</code> = langsung ke kamera, lewati tutorial</td></tr>
+  </tbody>
+</table>
+
+<p><code>VendorConfig</code> immutable — pakai <code>copyWith</code> untuk variasi:</p>
+<pre>const base = VendorConfig(skipTutorial: true);
+final light = base.copyWith(theme: ScannerTheme.light, locale: ScannerLocale.en);</pre>
+
+
+<!-- ============================================================ -->
+<!-- 7. TIPE SCAN                                                  -->
+<!-- ============================================================ -->
+<h2 id="s7">7. Tipe Scan (ScanType)</h2>
+<p>
+  Parameter <code>type</code> menentukan mode kerja engine — bukan filter hasil. Satu tipe per
+  sesi scanner.
+</p>
+<table>
+  <thead><tr><th>Nilai</th><th>value</th><th>Kode yang dipindai</th><th>Pilih saat</th></tr></thead>
+  <tbody>
+    <tr><td><code>ScanType.qr</code></td><td>0</td><td>QR Code (2D)</td><td>Tiket, pairing, URL, payload 2D</td></tr>
+    <tr><td><code>ScanType.barcode</code></td><td>1</td><td>Barcode 1D (EAN, UPC, Code128, dll.)</td><td>Produk retail, SKU, struk</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <strong>Ganti tipe</strong>
+  Untuk mengganti tipe, tutup halaman scanner lama (widget <code>dispose</code>) lalu buka
+  <code>QtrustScannerView</code> baru dengan <code>type</code> berbeda.
+</div>
+
+<!-- ============================================================ -->
+<!-- 8. CALLBACK & EVENT                                           -->
+<!-- ============================================================ -->
+<h2 id="s8">8. Callback &amp; Event</h2>
+<table>
+  <thead><tr><th>Callback</th><th>Argumen</th><th>Kapan dipanggil</th></tr></thead>
+  <tbody>
+    <tr><td><code>onResult</code></td><td><code>ScanResult</code></td><td>Tiap kode berhasil di-decode <span class="badge badge-req">WAJIB</span></td></tr>
+    <tr><td><code>onError</code></td><td><code>ScannerError</code></td><td>Error (izin, gagal muat halaman/aset, timeout)</td></tr>
+    <tr><td><code>onReady</code></td><td>—</td><td>Scanner siap (overlay loading bisa dibuka)</td></tr>
+    <tr><td><code>onClose</code></td><td>—</td><td>Scanner ditutup dari UI web internal</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-warn">
+  <strong>onResult fire berkali-kali</strong>
+  Dalam mode SDK, engine men-decode tiap frame dan memanggil <code>onResult</code> berulang selama
+  kode terlihat. Bila ingin "scan sekali lalu kembali", <strong>latch</strong> hasil pertama dan
+  abaikan sisanya (lihat Bagian 11) — pola sama dengan sampel iOS/Android.
+</div>
+
+<!-- ============================================================ -->
+<!-- 9. HASIL                                                      -->
+<!-- ============================================================ -->
+<h2 id="s9">9. Membaca Hasil (ScanResult)</h2>
+<pre>class ScanResult {
+  final String data;          // isi QR / barcode
+  final String format;        // contoh: "QR_CODE", "EAN_13"
+  final BoundingBox boundingBox;
+}
+
+class BoundingBox {
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+}</pre>
+
+<p>Contoh penggunaan:</p>
+<pre>void handle(ScanResult result) {
+  final text = result.data;
+  final format = result.format;
+  final box = result.boundingBox;
+  debugPrint('@(${box.x}, ${box.y}) ${box.width}×${box.height} — $format: $text');
+}</pre>
+
+<div class="callout">
+  <strong>boundingBox selalu non-null</strong>
+  Berbeda dengan SDK web, <code>boundingBox</code> di Flutter tidak pernah null — bila engine tak
+  mengirim lokasi, field jatuh ke <code>0</code> (lebar/tinggi 0). <code>data</code> tetap valid.
+</div>
+
+<!-- ============================================================ -->
+<!-- 10. LIFECYCLE                                                 -->
+<!-- ============================================================ -->
+<h2 id="s10">10. Lifecycle &amp; Cleanup</h2>
+<p>
+  <code>QtrustScannerView</code> memiliki kamera sendiri. Saat widget <code>dispose</code> (mis.
+  pop halaman), SDK otomatis tear down WebView dan melepas stream kamera — host tidak perlu
+  menghentikannya manual.
+</p>
+<table>
+  <thead><tr><th>Peristiwa</th><th>Efek</th></tr></thead>
+  <tbody>
+    <tr><td>Widget mount</td><td>Load halaman scanner bundel, inisialisasi on-device decoder, buka kamera</td></tr>
+    <tr><td><code>onReady</code></td><td>Kamera siap; overlay loading SDK menghilang</td></tr>
+    <tr><td>Widget <code>dispose</code></td><td>Tear down bridge, <code>about:blank</code>, lepas kamera</td></tr>
+  </tbody>
+</table>
+
+<div class="callout callout-success">
+  <strong>Best practice navigasi</strong>
+  Tampilkan scanner sebagai halaman (route) tersendiri. Saat hasil pertama diterima, <code>pop</code>
+  halaman scanner — widget <code>dispose</code> melepas kamera. Jangan menahan instance scanner
+  hidup di belakang layar.
+</div>
+
+<!-- ============================================================ -->
+<!-- 11. CONTOH LENGKAP                                            -->
+<!-- ============================================================ -->
+<h2 id="s11">11. Contoh Lengkap</h2>
+<p>
+  Halaman scanner penuh dengan pola <strong>latch hasil pertama</strong>: engine memanggil
+  <code>onResult</code> berulang, jadi kita kunci panggilan pertama dan <code>pop</code> tepat
+  sekali — menghindari over-pop.
+</p>
+<pre>import 'package:flutter/material.dart';
+import 'package:qtrust_scanner/qtrust_scanner.dart';
+
+class ScanPage extends StatefulWidget {
+  const ScanPage({super.key, required this.config, required this.type});
+
+  final ScannerConfig config;
+  final ScanType type;
+
+  @override
+  State&lt;ScanPage&gt; createState() =&gt; _ScanPageState();
+}
+
+class _ScanPageState extends State&lt;ScanPage&gt; {
+  bool _handled = false;
+
+  void _finish(ScanResult? result) {
+    if (_handled) return;
+    _handled = true;
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: QtrustScannerView(
+        config: widget.config,
+        type: widget.type,
+        onResult: _finish,                 // latch hasil pertama, lalu pop
+        onError: (e) =&gt; ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        ),
+        onClose: () =&gt; _finish(null),      // tombol close internal
+      ),
+    );
+  }
+}</pre>
+
+<h4>11.1 Membuka scanner &amp; menerima hasil</h4>
+<pre>Future&lt;void&gt; openScanner(BuildContext context) async {
+  final result = await Navigator.of(context).push&lt;ScanResult&gt;(
+    MaterialPageRoute(
+      builder: (_) =&gt; ScanPage(
+        config: const ScannerConfig(
+          vendorConfig: VendorConfig(skipTutorial: true),
+        ),
+        type: ScanType.qr,
+      ),
+    ),
+  );
+
+  if (result != null) {
+    debugPrint('Hasil: ${result.data} (${result.format})');
+  }
+}</pre>
+
+<div class="callout">
+  <strong>Contoh siap pakai</strong>
+  Lihat <code>example/</code> di repo SDK — home lengkap dengan pemilih tipe (QR/Barcode), toggle
+  skip-tutorial, tiga gaya konsumsi hasil (Callback / Stream / Async-Await), dan kartu LAST RESULT.
+</div>
+
+<!-- ============================================================ -->
+<!-- 12. REFERENSI API                                            -->
+<!-- ============================================================ -->
+<h2 id="s12">12. Referensi API</h2>
+<table>
+  <thead><tr><th>Simbol</th><th>Bentuk</th></tr></thead>
+  <tbody>
+    <tr><td><code>QtrustScannerView</code></td><td>Widget({ config, type, onResult, onError?, onReady?, onClose? })</td></tr>
+    <tr><td><code>ScannerConfig</code></td><td>({ timeout?, vendorConfig? })</td></tr>
+    <tr><td><code>VendorConfig</code></td><td>({ vendorId?, textHintScan?, theme?, locale?, skipTutorial? })</td></tr>
+    <tr><td><code>.copyWith</code></td><td>ScannerConfig / VendorConfig — salin dengan field diganti</td></tr>
+    <tr><td><code>ScanResult</code></td><td>{ data: String, format: String, boundingBox: BoundingBox }</td></tr>
+    <tr><td><code>BoundingBox</code></td><td>{ x, y, width, height : int }</td></tr>
+    <tr><td><code>ScanType</code></td><td>{ qr (0), barcode (1) }</td></tr>
+    <tr><td><code>ScannerTheme</code></td><td>{ dark (0), light (1) }</td></tr>
+    <tr><td><code>ScannerLocale</code></td><td>{ id (0), en (1) }</td></tr>
+    <tr><td><code>ScannerError</code></td><td>{ kind: ScannerErrorKind, message: String }</td></tr>
+    <tr><td><code>ScannerErrorKind</code></td><td>{ connectionFailed (gagal muat halaman/aset), permissionDenied, timeout }</td></tr>
+  </tbody>
+</table>
+
+<h4>12.1 Menangani error</h4>
+<pre>onError: (ScannerError error) {
+  switch (error.kind) {
+    case ScannerErrorKind.permissionDenied:
+      // arahkan user ke Settings untuk mengizinkan kamera
+      break;
+    case ScannerErrorKind.connectionFailed:
+      // halaman/aset scanner gagal dimuat — tampilkan retry
+      break;
+    case ScannerErrorKind.timeout:
+      // tidak ada hasil dalam batas waktu
+      break;
+  }
+}</pre>
+
+<!-- ============================================================ -->
+<!-- 13. KEAMANAN                                                  -->
+<!-- ============================================================ -->
+<h2 id="s13">13. Keamanan</h2>
+<ul>
+  <li><strong>Izin minimal.</strong> Deklarasikan hanya <code>NSCameraUsageDescription</code> / <code>CAMERA</code> — tidak ada izin lain yang dibutuhkan SDK.</li>
+  <li><strong>Origin lokal.</strong> UI scanner disajikan dari <code>localhost</code> (secure context) di dalam WebView; bukan dari <code>file://</code>. Tidak ada data keluar dari perangkat.</li>
+  <li><strong>On-device sepenuhnya.</strong> Tidak ada koneksi server. Hasil decode tidak meninggalkan perangkat kecuali host app yang mengirimkannya.</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- 14. TROUBLESHOOTING                                          -->
+<!-- ============================================================ -->
+<h2 id="s14">14. Troubleshooting</h2>
+<table>
+  <thead><tr><th>Gejala</th><th>Penyebab</th><th>Solusi</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Kamera hitam / tidak menyala</td>
+      <td>Izin kamera OS belum di-grant</td>
+      <td>iOS: pastikan <code>NSCameraUsageDescription</code> ada. Android: tambah <code>CAMERA</code> + minta grant runtime sebelum mount</td>
+    </tr>
+    <tr>
+      <td>Start lambat / lama loading</td>
+      <td>Aset bundel WebView belum selesai dimuat</td>
+      <td>Pastikan <code>flutter pub get</code> berjalan dan aset paket ter-include; coba hot restart</td>
+    </tr>
+    <tr>
+      <td>Hasil terus berulang / back "macet"</td>
+      <td>Engine men-decode tiap frame, <code>onResult</code> fire berkali-kali</td>
+      <td>Latch hasil pertama (<code>bool _handled</code>) lalu <code>pop</code> sekali — lihat Bagian 11</td>
+    </tr>
+    <tr>
+      <td>Layar scanner kosong / 0 tinggi</td>
+      <td>Container tanpa ukuran</td>
+      <td>Pakai di halaman penuh atau bungkus <code>Expanded</code>/<code>SizedBox</code> dengan ukuran eksplisit</td>
+    </tr>
+    <tr>
+      <td>Re-scan setelah back: layar hitam / lambat</td>
+      <td>Instance lama menahan kamera</td>
+      <td>Tampilkan scanner sebagai route; pop saat selesai agar widget <code>dispose</code> melepas kamera</td>
+    </tr>
+    <tr>
+      <td><code>flutter pub get</code> gagal resolve</td>
+      <td>Constraint Flutter/Dart di bawah minimum</td>
+      <td>Pakai Flutter ≥ 3.22, Dart ≥ 3.4</td>
+    </tr>
+    <tr>
+      <td>iOS build error soal kamera saat runtime</td>
+      <td><code>Info.plist</code> tanpa <code>NSCameraUsageDescription</code></td>
+      <td>Tambah key tersebut (Bagian 4.1) — iOS meng-crash akses kamera tanpa deskripsi</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Repo &amp; contoh</strong>
+  Source, contoh lengkap, dan changelog ada di
+  <code>github.com/qtrust-id/qtrust-sdk-scanner-flutter</code> dan halaman paket di
+  <code>pub.dev/packages/qtrust_scanner</code>.
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  // Wrap each <pre> in <code> with a guessed language, then highlight.
+  document.querySelectorAll('pre').forEach(function (pre) {
+    var text = pre.textContent;
+    var lang = /^\s*(flutter |dart |pub |export )/.test(text) ? 'bash'
+             : /^\s*(dependencies:|environment:|name:|flutter:)/.test(text) ? 'yaml'
+             : /&lt;[a-zA-Z]/.test(text) || /<[a-zA-Z]/.test(text) ? 'xml'
+             : 'dart';
+    var code = document.createElement('code');
+    code.className = 'language-' + lang;
+    code.textContent = text;
+    pre.textContent = '';
+    pre.appendChild(code);
+    if (window.hljs) hljs.highlightElement(code);
+  });
+</script>
+</body>
+</html>

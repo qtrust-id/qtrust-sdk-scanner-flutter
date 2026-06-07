@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0
+
+- Add `QtrustScannerController` for non-callback result consumption, matching
+  the native SDKs:
+  - **Stream** — listen to `controller.results` for every decode.
+  - **One-shot** — `await controller.next()` for a single result.
+- Add a cancellation error code surfaced when the scanner is closed mid-scan.
+- Remove the unused signed `sdk-manifest.json` from bundled assets (OTA
+  infrastructure dropped; decode runs fully on-device).
+
 ## 1.0.3
 
 - Initial public release of the QTrust Scanner Flutter SDK.

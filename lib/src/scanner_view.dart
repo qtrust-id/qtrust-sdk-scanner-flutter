@@ -9,6 +9,7 @@ import 'internal/scanner_bridge.dart';
 import 'scan_result.dart';
 import 'scan_type.dart';
 import 'scanner_config.dart';
+import 'scanner_controller.dart';
 import 'scanner_error.dart';
 
 /// Hosts the scanner WebView and surfaces decoded results via callbacks.
@@ -33,11 +34,16 @@ class QtrustScannerView extends StatefulWidget {
     super.key,
     required this.config,
     required this.type,
-    required this.onResult,
+    this.onResult,
     this.onError,
     this.onReady,
     this.onClose,
-  });
+    this.controller,
+  }) : assert(
+          onResult != null || controller != null,
+          'Provide onResult (callback style) or a controller (stream/one-shot '
+          'style) so decoded results have somewhere to go.',
+        );
 
   /// Scanner configuration (timeout, vendor settings).
   final ScannerConfig config;
@@ -45,8 +51,8 @@ class QtrustScannerView extends StatefulWidget {
   /// Type of code to scan.
   final ScanType type;
 
-  /// Called for each decoded result.
-  final void Function(ScanResult result) onResult;
+  /// Called for each decoded result. Optional when [controller] is supplied.
+  final void Function(ScanResult result)? onResult;
 
   /// Called when an error occurs.
   final void Function(ScannerError error)? onError;
@@ -56,6 +62,11 @@ class QtrustScannerView extends StatefulWidget {
 
   /// Called when the scanner is closed from within the web UI.
   final void Function()? onClose;
+
+  /// Optional controller exposing stream ([QtrustScannerController.results])
+  /// and one-shot ([QtrustScannerController.next]) APIs. The view feeds
+  /// results, errors, and close events into it while mounted.
+  final QtrustScannerController? controller;
 
   /// Loading overlay timeout — reveal the WebView even if `onReady` never fires.
   static const Duration _loadingTimeout = Duration(seconds: 15);
@@ -121,9 +132,9 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
     ]);
     _bridge = ScannerBridge(
       onResult: _handleResult,
-      onError: widget.onError,
+      onError: _handleError,
       onReady: _handleReady,
-      onClose: widget.onClose,
+      onClose: _handleClose,
     );
     _bootstrap = _start();
 
@@ -136,7 +147,7 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
     _timeoutTimer = Timer(widget.config.timeout, () {
       if (!mounted || _hasResult) return;
       _timeoutTimer = null;
-      widget.onError?.call(
+      _handleError(
         const ScannerError.timeout(
           'No scan result received within the configured timeout.',
         ),
@@ -149,7 +160,21 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
     _hasResult = true;
     _timeoutTimer?.cancel();
     _timeoutTimer = null;
-    widget.onResult(result);
+    widget.onResult?.call(result);
+    widget.controller?.emitResult(result);
+  }
+
+  /// Fans an error out to both the callback and the controller sinks.
+  void _handleError(ScannerError error) {
+    widget.onError?.call(error);
+    widget.controller?.emitError(error);
+  }
+
+  /// Fans a user-initiated close out to the callback and the controller sinks.
+  /// The controller surfaces it as [ScannerError.cancelled].
+  void _handleClose() {
+    widget.onClose?.call();
+    widget.controller?.emitClose();
   }
 
   Future<WebUri> _start() async {
@@ -163,7 +188,7 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
       return WebUri(url);
     } on Exception catch (e) {
       if (mounted) {
-        widget.onError?.call(
+        _handleError(
           ScannerError.connectionFailed('Scanner server failed to start: $e'),
         );
         setState(() => _ready = true);
@@ -279,7 +304,7 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
       },
       onReceivedError: (controller, request, error) {
         if (request.isForMainFrame != true) return;
-        widget.onError?.call(
+        _handleError(
           ScannerError.connectionFailed(
             'Page load failed: ${error.description}',
           ),
@@ -289,7 +314,7 @@ class _QtrustScannerViewState extends State<QtrustScannerView> {
       onReceivedHttpError: (controller, request, response) {
         if (request.isForMainFrame != true) return;
         final code = response.statusCode ?? 0;
-        widget.onError?.call(
+        _handleError(
           ScannerError.connectionFailed('Failed to load scanner (HTTP $code)'),
         );
         if (mounted && !_ready) setState(() => _ready = true);
