@@ -29,8 +29,16 @@ var onResultCb = null;
 // ── Symbology sets ─────────────────────────────────────
 // zxing-wasm accepts both canonical names ("QRCode") and HRI labels ("EAN-13"),
 // so the per-vendor formats string passes through unchanged.
-var QR_FORMATS = ["QRCode", "MicroQRCode", "Aztec", "DataMatrix"];
-var BARCODE_FORMATS = ["PDF417", "EAN-13", "EAN-8", "Code128", "Code39", "Codabar", "ITF", "UPC-A", "UPC-E"];
+//
+// Strict per-type sets — each ScanType decodes ONLY its own family so that
+// picking QR never also matches Aztec/DataMatrix (those are separate selectable
+// types). Keyed by the ScanType enum value; index aligns with state.ScanType.
+var FORMATS_BY_TYPE = {};
+FORMATS_BY_TYPE[ScanType.QR] = ["QRCode", "MicroQRCode"];
+FORMATS_BY_TYPE[ScanType.BARCODE] = ["EAN-13", "EAN-8", "Code128", "Code39", "Codabar", "ITF", "UPC-A", "UPC-E"];
+FORMATS_BY_TYPE[ScanType.PDF417] = ["PDF417"];
+FORMATS_BY_TYPE[ScanType.AZTEC] = ["Aztec"];
+FORMATS_BY_TYPE[ScanType.DATA_MATRIX] = ["DataMatrix"];
 
 // Map zxing-wasm canonical result formats to the SCREAMING_SNAKE convention the
 // protocol has used since the ZBar backend (matches server normalizeFormatName,
@@ -95,7 +103,7 @@ function readerOptions() {
     if (state.config.formats) {
         formats = state.config.formats.split("|").map(function (s) { return s.trim(); }).filter(Boolean);
     } else {
-        formats = state.scanType === ScanType.BARCODE ? BARCODE_FORMATS : QR_FORMATS;
+        formats = FORMATS_BY_TYPE[state.scanType] || FORMATS_BY_TYPE[ScanType.QR];
     }
     return {
         formats: formats,

@@ -1,12 +1,14 @@
 "use strict";
 
-import { state, ScanType } from "./modules/state.js";
+import { state, isLinearScanType } from "./modules/state.js";
 import { dbg } from "./modules/debug.js";
 import { bridgeResult, bridgeError, bridgeClose, bridgeReady } from "./modules/bridge.js";
 import { openCamera, toggleFlash, applyZoom, stopCamera } from "./modules/camera.js";
 import { tryStartCapture, stopCapture } from "./modules/capture.js";
 import { setDecodeCallbacks, ensureDecoder } from "./modules/decode.js";
+import { reportScan } from "./modules/telemetry.js";
 import { initEmbed, teardownEmbed } from "./modules/embed.js";
+import { initLifecycle } from "./modules/lifecycle.js";
 import {
     showScanner, showHome, showResultOnHome,
     showFlash, showTutorial, applyViewfinderMode,
@@ -26,6 +28,9 @@ import {
 // decode.js cannot import ui.js (would create circular dep), so the result
 // callback is injected here.
 function handleResult(data) {
+    // Single funnel for every platform — report the scanned value before any
+    // presentation branching. Fire-and-forget: never blocks result delivery.
+    reportScan(data);
     // SDK mode (native WebView + web-SDK iframe) hands the raw result to the host
     // and lets it own result presentation. Skip the white flash overlay — it
     // reads as a distracting screen blink when the host owns the UI.
@@ -60,7 +65,12 @@ function startScannerFlow() {
     state.cameraReady = false;
     // Per-session latch — clear the ready signal from a prior scan.
     state.readySignaled = false;
-    state.fps = state.scanType === ScanType.BARCODE ? 10 : 5;
+    // Clear any stale background-suspend latch from a previous session so the
+    // next hidden transition correctly releases the camera.
+    state.suspendedForVisibility = false;
+    // Linear codes (Barcode, PDF417) need a higher frame rate to lock onto a
+    // moving strip; square 2D codes (QR, Aztec, DataMatrix) decode fine at 5.
+    state.fps = isLinearScanType(state.scanType) ? 10 : 5;
     applyViewfinderMode();
 
     // Camera — marks cameraReady on success
@@ -179,7 +189,7 @@ if (btnZoomOut) {
 /**
  * Called by host app: ScannerInit({ type, config })
  * @param {Object} opts
- * @param {number}  opts.type      — ScanType enum (0=QR, 1=BARCODE)
+ * @param {number}  opts.type      — ScanType enum (0=QR, 1=BARCODE, 2=PDF417, 3=AZTEC, 4=DATA_MATRIX)
  * @param {Object} [opts.config]   — Vendor config
  * @param {string} [opts.config.vendorId]
  * @param {string} [opts.config.textHintScan]
@@ -242,6 +252,10 @@ window.ScannerUpdateConfig = function (updates) {
 
 // ── Boot ───────────────────────────────────────────────
 dbg("page loaded, secure=" + window.isSecureContext + " proto=" + location.protocol + " mode=" + state.mode);
+
+// Release/re-acquire the camera around background→foreground transitions so the
+// scanner does not freeze on a dead stream after the app loses focus.
+initLifecycle();
 
 if (state.isSDKMode) {
     // SDK mode — defer scanner start until ScannerInit delivers config.

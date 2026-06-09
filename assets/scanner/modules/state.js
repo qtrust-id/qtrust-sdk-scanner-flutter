@@ -18,23 +18,48 @@ function bootParam(name) {
 }
 
 // ── Enums ─────────────────────────────────────────────
+// Each ScanType is a distinct, strictly-scoped symbology family. Picking one
+// decodes ONLY its own formats — QR never also matches Aztec/DataMatrix. The
+// numeric values are the wire contract shared with every native SDK enum.
 /** @enum {number} */
-export var ScanType = { QR: 0, BARCODE: 1 };
+export var ScanType = { QR: 0, BARCODE: 1, PDF417: 2, AZTEC: 3, DATA_MATRIX: 4 };
 /** @enum {number} */
 export var Theme = { DARK: 0, LIGHT: 1 };
 /** @enum {number} */
 export var Locale = { ID: 0, EN: 1 };
 
-/** Map ScanType enum to canonical name string */
-export var SCAN_TYPE_NAMES = ["qr", "barcode"];
+/** Map ScanType enum to canonical name string (index === enum value). */
+export var SCAN_TYPE_NAMES = ["qr", "barcode", "pdf417", "aztec", "data_matrix"];
+
+// Linear (1D-layout) scan types — drive the wide viewfinder and the higher
+// capture fps. The remaining types (QR, Aztec, DataMatrix) are square 2D codes.
+var LINEAR_SCAN_TYPES = [ScanType.BARCODE, ScanType.PDF417];
 
 /**
- * Parse legacy string param ("qr"/"barcode") or int to ScanType enum.
- * @param {string|null} raw
+ * Whether a scan type uses the wide, linear viewfinder layout.
+ * @param {number} type ScanType enum value
+ * @returns {boolean}
+ */
+export function isLinearScanType(type) {
+    return LINEAR_SCAN_TYPES.indexOf(type) !== -1;
+}
+
+/**
+ * Parse a scan-type param (canonical name like "qr"/"pdf417" or numeric enum
+ * value/string) to the ScanType enum. Unknown input falls back to QR.
+ * @param {string|number|null} raw
  * @returns {number}
  */
 function parseScanType(raw) {
-    if (raw === "barcode" || raw === "1" || raw === 1) return ScanType.BARCODE;
+    if (typeof raw === "number") {
+        return SCAN_TYPE_NAMES[raw] !== undefined ? raw : ScanType.QR;
+    }
+    if (typeof raw === "string") {
+        var idx = SCAN_TYPE_NAMES.indexOf(raw.toLowerCase());
+        if (idx !== -1) return idx;
+        var n = parseInt(raw, 10);
+        if (!isNaN(n) && SCAN_TYPE_NAMES[n] !== undefined) return n;
+    }
     return ScanType.QR;
 }
 
@@ -91,6 +116,11 @@ export var state = {
 
     // Ready gate — capture starts once the camera and decoder are both ready.
     cameraReady: false,
+
+    // Lifecycle latch — set while the camera is released because the page is
+    // backgrounded (Page Visibility hidden). Gates the resume re-acquire so we
+    // only restart what the lifecycle handler itself suspended. See lifecycle.js.
+    suspendedForVisibility: false,
 
     // Idempotency guard — a repeated ScannerInit (the web SDK fires sdk_init on
     // start + iframe load + sdk_ready to beat load-order races) must NOT re-open

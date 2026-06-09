@@ -1,6 +1,6 @@
 "use strict";
 
-import { state, ScanType } from "./state.js";
+import { state, ScanType, SCAN_TYPE_NAMES, isLinearScanType } from "./state.js";
 import { stopCapture } from "./capture.js";
 import { stopCamera } from "./camera.js";
 
@@ -87,17 +87,27 @@ export function showFlash() {
     }, 100);
 }
 
+// Default scan-instruction hint per type (label embedded). Keyed by ScanType
+// enum value; vendor config.textHintScan overrides it entirely.
+var SCAN_HINTS = {};
+SCAN_HINTS[ScanType.QR] = "Arahkan ke QR Code pada kemasan";
+SCAN_HINTS[ScanType.BARCODE] = "Arahkan ke Barcode pada kemasan";
+SCAN_HINTS[ScanType.PDF417] = "Arahkan ke PDF417 pada kemasan";
+SCAN_HINTS[ScanType.AZTEC] = "Arahkan ke Aztec pada kemasan";
+SCAN_HINTS[ScanType.DATA_MATRIX] = "Arahkan ke DataMatrix pada kemasan";
+
 export function applyViewfinderMode() {
-    var isBarcode = state.scanType === ScanType.BARCODE;
-    if (viewfinder) viewfinder.classList.toggle("barcode-mode", isBarcode);
+    // Linear codes (Barcode, PDF417) use the wide viewfinder; square 2D codes
+    // (QR, Aztec, DataMatrix) keep the default square frame.
+    var isLinear = isLinearScanType(state.scanType);
+    if (viewfinder) viewfinder.classList.toggle("barcode-mode", isLinear);
     if (scanInstructionText) {
         // Vendor override via config.textHintScan; fallback to default per scanType
         if (state.config.textHintScan) {
             scanInstructionText.textContent = state.config.textHintScan;
         } else {
-            scanInstructionText.textContent = isBarcode
-                ? "Arahkan ke Barcode pada kemasan"
-                : "Arahkan ke QR Code pada kemasan";
+            scanInstructionText.textContent =
+                SCAN_HINTS[state.scanType] || SCAN_HINTS[ScanType.QR];
         }
     }
 }
@@ -154,7 +164,7 @@ export function initHomeScreen(onStartScan) {
         btn.addEventListener("click", function () {
             var parsed = parseInt(btn.getAttribute("data-type"), 10);
             // Validate parsed value against known ScanType set — ignore NaN or unknown.
-            if (parsed !== ScanType.QR && parsed !== ScanType.BARCODE) return;
+            if (isNaN(parsed) || SCAN_TYPE_NAMES[parsed] === undefined) return;
             scanTypeBtns.forEach(function (b) { b.classList.remove("active"); });
             btn.classList.add("active");
             state.scanType = parsed;

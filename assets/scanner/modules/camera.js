@@ -3,6 +3,7 @@
 import { state, ScanType } from "./state.js";
 import { dbg } from "./debug.js";
 import { computeViewfinderCrop } from "./capture.js";
+import { pickMainLens } from "./camera-selection.js";
 
 var video = document.getElementById("video");
 var canvas = document.getElementById("canvas");
@@ -25,8 +26,8 @@ export function openCamera() {
 
     dbg("calling getUserMedia...");
     // Use ideal (soft) facingMode so devices that only have a single camera do
-    // not trigger an OverconstrainedError. Falls back to any available camera
-    // on OverconstrainedError for maximum device compatibility.
+    // not trigger an OverconstrainedError. Multi-camera devices are refined
+    // after permission reveals their camera labels and opaque device IDs.
     var constraints = {
         video: { facingMode: { ideal: FACING_MODE }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
@@ -48,7 +49,7 @@ export function openCamera() {
         });
     }
 
-    return doGetUserMedia(constraints).then(function (s) {
+    return doGetUserMedia(constraints).then(refineToMainLens).then(function (s) {
         dbg("got stream, tracks=" + s.getTracks().length);
         state.stream = s;
         video.srcObject = state.stream;
@@ -106,6 +107,50 @@ export function openCamera() {
         status.textContent = "Kamera tidak dapat dibuka";
         throw err;
     });
+}
+
+/**
+ * On multi-lens devices, facingMode:environment may hand back the ultra-wide
+ * lens. Re-acquire the stream on the main lens when a better one exists. Always
+ * resolves to a usable stream — falls back to the original on any failure.
+ * @param {MediaStream} stream
+ * @returns {Promise<MediaStream>}
+ */
+function refineToMainLens(stream) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        return Promise.resolve(stream);
+    }
+    var track = stream.getVideoTracks()[0];
+    var currentId = track && track.getSettings ? track.getSettings().deviceId : null;
+
+    return navigator.mediaDevices.enumerateDevices().then(function (devices) {
+        var deviceSummary = devices.filter(function (d) {
+            return d.kind === "videoinput";
+        }).map(function (d) {
+            return d.deviceId + "=" + d.label;
+        }).join(" | ");
+        dbg("camera devices: " + deviceSummary);
+        var targetId = pickMainLens(devices, currentId);
+        if (!targetId || targetId === currentId) return stream;
+
+        dbg("multi-lens: switching to main lens " + targetId);
+        // Some Android camera HALs mark physical rear cameras as mutually
+        // exclusive. Release the ultra-wide before requesting the main lens,
+        // otherwise getUserMedia fails with "Too many cameras already open".
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        return navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: targetId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+        }).then(function (better) {
+            return better;
+        }).catch(function (err) {
+            dbg("lens switch failed (" + err.name + "), reopening default: " + err.message);
+            return navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: FACING_MODE }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
+        });
+    }).catch(function () { return stream; });
 }
 
 function initZoomCapabilities() {

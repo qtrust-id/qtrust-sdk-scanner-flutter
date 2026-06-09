@@ -37,6 +37,15 @@ enum ApiStyle {
   final Color color;
 }
 
+/// Display label for each scan type shown in the home picker.
+String _scanTypeLabel(ScanType type) => switch (type) {
+      ScanType.qr => 'QR Code',
+      ScanType.barcode => 'Barcode',
+      ScanType.pdf417 => 'PDF417',
+      ScanType.aztec => 'Aztec',
+      ScanType.dataMatrix => 'DataMatrix',
+    };
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -96,16 +105,17 @@ class _HomePageState extends State<HomePage> {
               _Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: SegmentedButton<ScanType>(
-                    segments: const [
-                      ButtonSegment(value: ScanType.qr, label: Text('QR Code')),
-                      ButtonSegment(
-                        value: ScanType.barcode,
-                        label: Text('Barcode'),
-                      ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final type in ScanType.values)
+                        ChoiceChip(
+                          label: Text(_scanTypeLabel(type)),
+                          selected: _type == type,
+                          onSelected: (_) => setState(() => _type = type),
+                        ),
                     ],
-                    selected: {_type},
-                    onSelectionChanged: (s) => setState(() => _type = s.first),
                   ),
                 ),
               ),

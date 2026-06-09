@@ -22,11 +22,24 @@
   function bootParam(name) {
     return boot[name] !== void 0 && boot[name] !== null ? boot[name] : params.get(name);
   }
-  var ScanType = { QR: 0, BARCODE: 1 };
+  var ScanType = { QR: 0, BARCODE: 1, PDF417: 2, AZTEC: 3, DATA_MATRIX: 4 };
   var Theme = { DARK: 0, LIGHT: 1 };
   var Locale = { ID: 0, EN: 1 };
+  var SCAN_TYPE_NAMES = ["qr", "barcode", "pdf417", "aztec", "data_matrix"];
+  var LINEAR_SCAN_TYPES = [ScanType.BARCODE, ScanType.PDF417];
+  function isLinearScanType(type) {
+    return LINEAR_SCAN_TYPES.indexOf(type) !== -1;
+  }
   function parseScanType(raw) {
-    if (raw === "barcode" || raw === "1" || raw === 1) return ScanType.BARCODE;
+    if (typeof raw === "number") {
+      return SCAN_TYPE_NAMES[raw] !== void 0 ? raw : ScanType.QR;
+    }
+    if (typeof raw === "string") {
+      var idx = SCAN_TYPE_NAMES.indexOf(raw.toLowerCase());
+      if (idx !== -1) return idx;
+      var n2 = parseInt(raw, 10);
+      if (!isNaN(n2) && SCAN_TYPE_NAMES[n2] !== void 0) return n2;
+    }
     return ScanType.QR;
   }
   var state = {
@@ -73,6 +86,10 @@
     captureCrop: null,
     // Ready gate — capture starts once the camera and decoder are both ready.
     cameraReady: false,
+    // Lifecycle latch — set while the camera is released because the page is
+    // backgrounded (Page Visibility hidden). Gates the resume re-acquire so we
+    // only restart what the lifecycle handler itself suspended. See lifecycle.js.
+    suspendedForVisibility: false,
     // Idempotency guard — a repeated ScannerInit (the web SDK fires sdk_init on
     // start + iframe load + sdk_ready to beat load-order races) must NOT re-open
     // the camera, or the second getUserMedia aborts the first video.play().
@@ -2303,8 +2320,12 @@
   var wasmLoadPromise = null;
   var decoding = false;
   var onResultCb = null;
-  var QR_FORMATS = ["QRCode", "MicroQRCode", "Aztec", "DataMatrix"];
-  var BARCODE_FORMATS = ["PDF417", "EAN-13", "EAN-8", "Code128", "Code39", "Codabar", "ITF", "UPC-A", "UPC-E"];
+  var FORMATS_BY_TYPE = {};
+  FORMATS_BY_TYPE[ScanType.QR] = ["QRCode", "MicroQRCode"];
+  FORMATS_BY_TYPE[ScanType.BARCODE] = ["EAN-13", "EAN-8", "Code128", "Code39", "Codabar", "ITF", "UPC-A", "UPC-E"];
+  FORMATS_BY_TYPE[ScanType.PDF417] = ["PDF417"];
+  FORMATS_BY_TYPE[ScanType.AZTEC] = ["Aztec"];
+  FORMATS_BY_TYPE[ScanType.DATA_MATRIX] = ["DataMatrix"];
   var FORMAT_MAP = {
     QRCode: "QR_CODE",
     MicroQRCode: "MICRO_QR_CODE",
@@ -2350,7 +2371,7 @@
         return s2.trim();
       }).filter(Boolean);
     } else {
-      formats = state.scanType === ScanType.BARCODE ? BARCODE_FORMATS : QR_FORMATS;
+      formats = FORMATS_BY_TYPE[state.scanType] || FORMATS_BY_TYPE[ScanType.QR];
     }
     return {
       formats,
@@ -2479,6 +2500,48 @@
     state.captureTimer = setTimeout(captureLoop, 1e3 / state.fps);
   }
 
+  // modules/camera-selection.js
+  var SECONDARY_LENS = /ultra|0\.5|telephoto|\btele\b|depth|truedepth|macro|mono/i;
+  var VIRTUAL_LENS = /dual|triple|tripple/i;
+  var BACK_LENS = /back|rear|environment|belakang/i;
+  var MAIN_WIDE_LENS = /\bwide\b/i;
+  var ANDROID_CAMERA_ID = /camera2?\s+(\d+)/i;
+  function pickMainLens(devices, currentId) {
+    var cams = devices.filter(function(d2) {
+      return d2.kind === "videoinput";
+    });
+    if (cams.length < 2 || !cams.some(function(c2) {
+      return c2.label;
+    })) return null;
+    var back = cams.filter(function(c2) {
+      return BACK_LENS.test(c2.label);
+    });
+    var pool = back.length ? back : cams;
+    function score(label) {
+      var s2 = 0;
+      var androidId = label.match(ANDROID_CAMERA_ID);
+      if (SECONDARY_LENS.test(label)) s2 -= 100;
+      if (VIRTUAL_LENS.test(label)) s2 += 30;
+      if (MAIN_WIDE_LENS.test(label) && !/ultra/i.test(label)) s2 += 20;
+      if (androidId) s2 += Math.max(0, 10 - Number(androidId[1]));
+      return s2;
+    }
+    var current = pool.find(function(c2) {
+      return c2.deviceId === currentId;
+    });
+    var currentScore = current ? score(current.label) : 0;
+    var best = null;
+    var bestScore = currentScore;
+    pool.forEach(function(c2) {
+      var candidateScore = score(c2.label);
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore;
+        best = c2;
+      }
+    });
+    return best ? best.deviceId : null;
+  }
+
   // modules/camera.js
   var video2 = document.getElementById("video");
   var canvas2 = document.getElementById("canvas");
@@ -2512,7 +2575,7 @@
         throw err;
       });
     }
-    return doGetUserMedia(constraints).then(function(s2) {
+    return doGetUserMedia(constraints).then(refineToMainLens).then(function(s2) {
       dbg("got stream, tracks=" + s2.getTracks().length);
       state.stream = s2;
       video2.srcObject = state.stream;
@@ -2563,6 +2626,41 @@
       dbg("ERROR getUserMedia: " + err.name + " - " + err.message);
       status.textContent = "Kamera tidak dapat dibuka";
       throw err;
+    });
+  }
+  function refineToMainLens(stream) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      return Promise.resolve(stream);
+    }
+    var track = stream.getVideoTracks()[0];
+    var currentId = track && track.getSettings ? track.getSettings().deviceId : null;
+    return navigator.mediaDevices.enumerateDevices().then(function(devices) {
+      var deviceSummary = devices.filter(function(d2) {
+        return d2.kind === "videoinput";
+      }).map(function(d2) {
+        return d2.deviceId + "=" + d2.label;
+      }).join(" | ");
+      dbg("camera devices: " + deviceSummary);
+      var targetId = pickMainLens(devices, currentId);
+      if (!targetId || targetId === currentId) return stream;
+      dbg("multi-lens: switching to main lens " + targetId);
+      stream.getTracks().forEach(function(t2) {
+        t2.stop();
+      });
+      return navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: targetId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      }).then(function(better) {
+        return better;
+      }).catch(function(err) {
+        dbg("lens switch failed (" + err.name + "), reopening default: " + err.message);
+        return navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: FACING_MODE }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+      });
+    }).catch(function() {
+      return stream;
     });
   }
   function initZoomCapabilities() {
@@ -2636,6 +2734,104 @@
     });
   }
 
+  // modules/telemetry.js
+  var TELEMETRY_URL = "https://staging-ce-app-sdk-api.qtrust.id/v1/sdk/scan";
+  var TELEMETRY_API_KEY = "qtrust-sdk-web-key-2026";
+  var APP_VERSION = "1.2.4";
+  var DEDUP_WINDOW_MS = 3e3;
+  var lastValue = null;
+  var lastAt = 0;
+  var sessionId = null;
+  function getSessionId() {
+    if (sessionId) return sessionId;
+    var id;
+    try {
+      if (typeof crypto !== "undefined" && crypto.randomUUID) {
+        id = crypto.randomUUID();
+      }
+    } catch (e2) {
+    }
+    if (!id) {
+      var rnd = function() {
+        return Math.floor(Math.random() * 65536).toString(16);
+      };
+      id = rnd() + rnd() + "-" + rnd() + "-" + rnd() + "-" + rnd() + "-" + rnd() + rnd() + rnd();
+    }
+    sessionId = "sdk-web-" + id;
+    return sessionId;
+  }
+  function detectSource() {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scannerBridge) {
+      return "sdk-ios";
+    }
+    if (window.ScannerBridge) return "sdk-android";
+    return "sdk-web";
+  }
+  function reportScan(result) {
+    try {
+      if (!result || !result.data) return;
+      var now = Date.now();
+      if (result.data === lastValue && now - lastAt < DEDUP_WINDOW_MS) return;
+      lastValue = result.data;
+      lastAt = now;
+      var payload = {
+        scanner_id: getSessionId(),
+        value: result.data,
+        source: detectSource(),
+        scan_date: (/* @__PURE__ */ new Date()).toISOString(),
+        metadata: {
+          format: result.format,
+          app_version: APP_VERSION
+        }
+      };
+      if (typeof fetch !== "function") return;
+      fetch(TELEMETRY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Api-Key": TELEMETRY_API_KEY
+        },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function() {
+      });
+    } catch (e2) {
+    }
+  }
+
+  // modules/lifecycle.js
+  function onHidden() {
+    if (!state.scanActive || state.suspendedForVisibility) return;
+    dbg("lifecycle: hidden \u2014 releasing camera");
+    state.suspendedForVisibility = true;
+    state.cameraReady = false;
+    stopCapture();
+    stopCamera();
+  }
+  function onVisible() {
+    if (!state.scanActive || !state.suspendedForVisibility) return;
+    state.suspendedForVisibility = false;
+    dbg("lifecycle: visible \u2014 re-acquiring camera");
+    openCamera().then(function() {
+      if (!state.scanActive) return;
+      state.cameraReady = true;
+      tryStartCapture();
+    }).catch(function(err) {
+      dbg("lifecycle: camera re-acquire failed: " + (err ? err.message : "unknown"));
+      bridgeError("camera error: " + (err ? err.message : "unknown"));
+    });
+  }
+  function initLifecycle() {
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === "hidden") {
+        onHidden();
+      } else if (document.visibilityState === "visible") {
+        onVisible();
+      }
+    });
+    dbg("lifecycle: visibility handler installed");
+  }
+
   // modules/ui.js
   var homeScreen = document.getElementById("home-screen");
   var scannerContainer = document.getElementById("scanner-container");
@@ -2704,14 +2900,20 @@
       }, 150);
     }, 100);
   }
+  var SCAN_HINTS = {};
+  SCAN_HINTS[ScanType.QR] = "Arahkan ke QR Code pada kemasan";
+  SCAN_HINTS[ScanType.BARCODE] = "Arahkan ke Barcode pada kemasan";
+  SCAN_HINTS[ScanType.PDF417] = "Arahkan ke PDF417 pada kemasan";
+  SCAN_HINTS[ScanType.AZTEC] = "Arahkan ke Aztec pada kemasan";
+  SCAN_HINTS[ScanType.DATA_MATRIX] = "Arahkan ke DataMatrix pada kemasan";
   function applyViewfinderMode() {
-    var isBarcode = state.scanType === ScanType.BARCODE;
-    if (viewfinder) viewfinder.classList.toggle("barcode-mode", isBarcode);
+    var isLinear = isLinearScanType(state.scanType);
+    if (viewfinder) viewfinder.classList.toggle("barcode-mode", isLinear);
     if (scanInstructionText) {
       if (state.config.textHintScan) {
         scanInstructionText.textContent = state.config.textHintScan;
       } else {
-        scanInstructionText.textContent = isBarcode ? "Arahkan ke Barcode pada kemasan" : "Arahkan ke QR Code pada kemasan";
+        scanInstructionText.textContent = SCAN_HINTS[state.scanType] || SCAN_HINTS[ScanType.QR];
       }
     }
   }
@@ -2747,7 +2949,7 @@
       }
       btn.addEventListener("click", function() {
         var parsed = parseInt(btn.getAttribute("data-type"), 10);
-        if (parsed !== ScanType.QR && parsed !== ScanType.BARCODE) return;
+        if (isNaN(parsed) || SCAN_TYPE_NAMES[parsed] === void 0) return;
         scanTypeBtns.forEach(function(b2) {
           b2.classList.remove("active");
         });
@@ -2771,6 +2973,7 @@
     }
   })();
   function handleResult(data) {
+    reportScan(data);
     if (state.isSDKMode) {
       bridgeResult(data);
       return;
@@ -2789,7 +2992,8 @@
     dbg("startScannerFlow: type=" + state.scanType);
     state.cameraReady = false;
     state.readySignaled = false;
-    state.fps = state.scanType === ScanType.BARCODE ? 10 : 5;
+    state.suspendedForVisibility = false;
+    state.fps = isLinearScanType(state.scanType) ? 10 : 5;
     applyViewfinderMode();
     openCamera().then(function() {
       if (!state.scanActive) return;
@@ -2927,6 +3131,7 @@
     dbg("ScannerUpdateConfig: " + JSON.stringify(state.config));
   };
   dbg("page loaded, secure=" + window.isSecureContext + " proto=" + location.protocol + " mode=" + state.mode);
+  initLifecycle();
   if (state.isSDKMode) {
     dbg("SDK mode \u2014 waiting for ScannerInit...");
   }
